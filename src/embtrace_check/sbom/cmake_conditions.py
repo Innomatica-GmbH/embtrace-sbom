@@ -37,6 +37,7 @@ dependency, they are not a declaration (same class as Befund 34).
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -92,6 +93,24 @@ class CMakeContext:
     cache: dict[str, str] = field(default_factory=dict)
     #: True when at least one CMakeCache.txt was found — the build is decided.
     has_cache: bool = False
+    #: resolved child dir → (resolved parent dir, guard atoms) — a subdirectory
+    #: added under ``if(LWS_WITH_MBEDTLS) add_subdirectory(mbedtls)`` inherits
+    #: that guard, and so does every find_library inside it (Befund 46).
+    added_by: dict[str, tuple[str, list[tuple[bool, str]]]] = field(
+        default_factory=dict,
+    )
+
+    def inherited_atoms(self, dir_str: str) -> list[_Atom]:
+        """Guard atoms a directory inherits from the add_subdirectory chain."""
+        atoms: list[_Atom] = []
+        cur = dir_str
+        seen: set[str] = set()
+        while cur in self.added_by and cur not in seen:
+            seen.add(cur)
+            parent, tuples = self.added_by[cur]
+            atoms = [_Atom(neg, expr) for neg, expr in tuples] + atoms
+            cur = parent
+        return atoms
 
     def known(self, name: str) -> bool:
         """Is *name* a variable this context can resolve (cache or option)?"""
@@ -158,9 +177,18 @@ def version_from_cache(name: str, ctx: CMakeContext) -> str:
 # --- Command tokenizer (balanced parentheses) ---------------------------------
 
 _COMMAND = re.compile(
-    r"\b(if|elseif|else|endif|find_package|find_host_package)\s*\(",
+    r"\b(if|elseif|else|endif|find_package|find_host_package|find_library|"
+    r"find_path|pkg_check_modules|pkg_search_module|ocv_check_modules|"
+    r"check_library_exists|add_subdirectory)\s*\(",
     re.IGNORECASE,
 )
+
+#: Dep-producing commands (everything but the control-flow keywords).
+_DEP_COMMANDS: frozenset[str] = frozenset({
+    "find_package", "find_host_package", "find_library", "find_path",
+    "pkg_check_modules", "pkg_search_module", "ocv_check_modules",
+    "check_library_exists",
+})
 
 
 def _strip_comments(content: str) -> str:
@@ -379,49 +407,158 @@ _SKIP_FIND: frozenset[str] = frozenset({
 })
 
 _FIND_ARG_NAME = re.compile(r"^\s*(\w+)(?:\s+(\d[\w._-]*))?")
+# The following mirror analyzer/parsers/cmake.py EXACTLY so the names line up
+# with the pipeline's — _apply_cmake_conditions matches on (source_file, name).
+_ARG_FIND_LIBRARY = re.compile(
+    r"^\s*\w+(?:\s+(?:REQUIRED|QUIET))*\s+(?:NAMES?\s+)?(\w+)", re.IGNORECASE,
+)
+_ARG_FIND_PATH = re.compile(
+    r"^\s*\w+\s+(?:NAMES?\s+)?([a-zA-Z0-9_]+)/", re.IGNORECASE,
+)
+_ARG_PKG = re.compile(
+    r"^\s*\w+"
+    r"(?:\s+(?:REQUIRED|QUIET|IMPORTED_TARGET|NO_CMAKE_PATH|"
+    r"NO_CMAKE_ENVIRONMENT_PATH))*"
+    r"\s+['\"]?([a-zA-Z0-9_][a-zA-Z0-9_.+-]*)",
+    re.IGNORECASE,
+)
+_ARG_CHECK_LIB = re.compile(r"^\s*(\w+)", re.IGNORECASE)
+#: Generic find_path header prefixes that are not library names.
+_FIND_PATH_GENERIC: frozenset[str] = frozenset({
+    "include", "src", "lib", "usr", "opt", "sys",
+})
+#: flag tokens that a find_library/find_path capture must not mistake for a name.
+_CMAKE_FLAG_TOKENS: frozenset[str] = frozenset({
+    "REQUIRED", "QUIET", "NAMES", "HINTS", "PATHS", "PATH_SUFFIXES", "DOC",
+    "NO_DEFAULT_PATH", "NO_CMAKE_PATH",
+})
 
 
-def find_packages(content: str, ctx: CMakeContext) -> list[FindPackageHit]:
-    """Classify every ``find_package`` in *content* against *ctx*."""
+def _name_from_command(cmd: str, args: str) -> tuple[str, str] | None:
+    """Extract (name, version) for a dep command, or None. version is '' for
+    everything but find_package. Mirrors analyzer/parsers/cmake.py."""
+    if cmd in ("find_package", "find_host_package"):
+        m = _FIND_ARG_NAME.match(args)
+        if not m or m.group(1) in _SKIP_FIND:
+            return None
+        return m.group(1), (m.group(2) or "")
+    if cmd == "find_library":
+        m = _ARG_FIND_LIBRARY.match(args)
+        if not m or m.group(1).upper() in _CMAKE_FLAG_TOKENS:
+            return None
+        return m.group(1), ""
+    if cmd == "find_path":
+        m = _ARG_FIND_PATH.match(args)
+        if not m:
+            return None
+        name = m.group(1)
+        if name.lower() in _FIND_PATH_GENERIC or name.upper() in _CMAKE_FLAG_TOKENS:
+            return None
+        return name, ""
+    if cmd in ("pkg_check_modules", "pkg_search_module", "ocv_check_modules"):
+        m = _ARG_PKG.match(args)
+        return (m.group(1), "") if m else None
+    if cmd == "check_library_exists":
+        m = _ARG_CHECK_LIB.match(args)
+        return (m.group(1), "") if m else None
+    return None
+
+
+def _iter_with_branches(
+    content: str,
+) -> Iterator[tuple[str, str, list[_Atom]]]:
+    """Yield ``(command, args, branch_atoms)`` — every non-control command with
+    the condition atoms in effect where it appears."""
     content = _strip_comments(content)
     stack: list[_Frame] = []
-    hits: list[FindPackageHit] = []
-
     for cmd, args in _iter_commands(content):
         if cmd == "if":
             expr = args.strip()
             stack.append(_Frame(seen=[expr], current=[_Atom(False, expr)]))
         elif cmd == "elseif":
-            if not stack:
-                continue
-            frame = stack[-1]
-            expr = args.strip()
-            atoms = [_Atom(True, e) for e in frame.seen]
-            atoms.append(_Atom(False, expr))
-            frame.current = atoms
-            frame.seen.append(expr)
+            if stack:
+                frame = stack[-1]
+                expr = args.strip()
+                frame.current = [_Atom(True, e) for e in frame.seen]
+                frame.current.append(_Atom(False, expr))
+                frame.seen.append(expr)
         elif cmd == "else":
-            if not stack:
-                continue
-            frame = stack[-1]
-            frame.current = [_Atom(True, e) for e in frame.seen]
+            if stack:
+                stack[-1].current = [_Atom(True, e) for e in stack[-1].seen]
         elif cmd == "endif":
             if stack:
                 stack.pop()
-        else:  # find_package / find_host_package
-            m = _FIND_ARG_NAME.match(args)
-            if not m:
-                continue
-            name = m.group(1)
-            if name in _SKIP_FIND:
-                continue
-            version = m.group(2) or ""
-            state, condition = _classify(_branch_atoms(stack), ctx)
-            hits.append(FindPackageHit(
-                name=name, version=version, state=state, condition=condition,
-            ))
+        else:
+            yield cmd, args, _branch_atoms(stack)
 
+
+def _walk_dependencies(
+    content: str, ctx: CMakeContext, *, find_package_only: bool,
+    inherited: list[_Atom] | None = None,
+) -> list[FindPackageHit]:
+    """Classify dependency commands against their branch condition.
+
+    ``find_package_only`` keeps :func:`find_packages` at its historical scope
+    (``scan_cmake`` emits only those); the full set (find_library, find_path,
+    pkg_check_modules, …) drives :func:`find_dependencies` for the pipeline
+    filter, so an option-guarded find_library (mbedtls, alsa) is resolved the
+    same way a find_package is (Befund 46). *inherited* prepends the guard a
+    directory carries from the ``add_subdirectory`` chain.
+    """
+    base = list(inherited or [])
+    hits: list[FindPackageHit] = []
+    for cmd, args, atoms in _iter_with_branches(content):
+        if cmd not in _DEP_COMMANDS:
+            continue
+        if find_package_only and cmd not in ("find_package", "find_host_package"):
+            continue
+        extracted = _name_from_command(cmd, args)
+        if extracted is None:
+            continue
+        name, version = extracted
+        state, condition = _classify(base + atoms, ctx)
+        hits.append(FindPackageHit(
+            name=name, version=version, state=state, condition=condition,
+        ))
     return hits
+
+
+_ADD_SUBDIR_ARG = re.compile(r"\s*([^\s)]+)")
+
+
+def _collect_add_subdirs(
+    content: str, file_dir: Path,
+) -> list[tuple[str, list[tuple[bool, str]]]]:
+    """Yield ``(resolved child dir, guard atoms)`` for each add_subdirectory."""
+    out: list[tuple[str, list[tuple[bool, str]]]] = []
+    for cmd, args, atoms in _iter_with_branches(content):
+        if cmd != "add_subdirectory":
+            continue
+        m = _ADD_SUBDIR_ARG.match(args)
+        if not m:
+            continue
+        raw = m.group(1).strip().strip('"')
+        if not raw or "$" in raw or raw.startswith("/"):
+            continue  # variable-driven or absolute — cannot resolve statically
+        child = (file_dir / raw).resolve()
+        out.append((str(child), [(a.negate, a.expr) for a in atoms]))
+    return out
+
+
+def find_packages(content: str, ctx: CMakeContext) -> list[FindPackageHit]:
+    """Classify every ``find_package`` in *content* against *ctx*."""
+    return _walk_dependencies(content, ctx, find_package_only=True)
+
+
+def find_dependencies(
+    content: str, ctx: CMakeContext, *, inherited: list[_Atom] | None = None,
+) -> list[FindPackageHit]:
+    """Classify every dependency-producing command (find_package, find_library,
+    find_path, pkg_check_modules, …) against its branch condition, prepending
+    the *inherited* add_subdirectory guard for the file's directory."""
+    return _walk_dependencies(
+        content, ctx, find_package_only=False, inherited=inherited,
+    )
 
 
 # --- Project-wide context building --------------------------------------------
@@ -515,6 +652,12 @@ def build_cmake_context(root: Path, *, max_depth: int = 5) -> CMakeContext:
                 except OSError:
                     continue
                 _parse_options(text, ctx.options)
+                # add_subdirectory(X) under a guard makes X (and its find_library
+                # calls) inherit that guard (Befund 46).
+                parent = str(entry.parent.resolve())
+                for child, atom_tuples in _collect_add_subdirs(text, entry.parent):
+                    if atom_tuples:  # only record guarded subdirectories
+                        ctx.added_by[child] = (parent, atom_tuples)
 
     _walk(root, 0)
     if ctx.options or ctx.cache:

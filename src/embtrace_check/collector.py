@@ -25,6 +25,7 @@ from embtrace_check.sbom.classify import (
     _C_KEYWORDS,
     _looks_like_library,
     clean_dependency,
+    is_invalid_name,
     strip_control_chars,
 )
 from embtrace_check.sbom.scanner import _TEST_SCOPE_DIRS, scan_directory_recursive
@@ -107,6 +108,15 @@ def collect_components(
     # name alone: npm regularly nests two versions of one package, and
     # the older nested one is often the vulnerable one (order
     # collector-mehrfachversionen).
+    # The project's own name (its directory) is not a third-party component;
+    # neither is an unexpanded CMake variable (Befund 47).
+    proj = normalize_dep_name(path.resolve().name)
+
+    def _not_component(name: str) -> bool:
+        return is_invalid_name(name) or (
+            bool(proj) and normalize_dep_name(name) == proj
+        )
+
     merged: dict[tuple[str, str], CheckComponent] = {}
     # Conditional ALTERNATIVES travel MARKED, not dropped (Befund 44): the
     # report can then say "your project can be built with OpenSSL or LibreSSL
@@ -130,6 +140,8 @@ def collect_components(
         # Control-char hygiene FIRST (Befund 15 — a scanner once read colored
         # tool output), so the dedup key and the uploaded payload are clean.
         clean_dependency(dep)
+        if not dep.declared and _not_component(dep.name):
+            continue  # ${ARGN} or the project depending on itself (Befund 47)
         # A find_package behind an off-by-default option is an ALTERNATIVE —
         # it travels marked with its guard, never as a present component.
         if dep.condition:
@@ -198,6 +210,8 @@ def collect_components(
     seen_names = {name for name, _version in merged}
     for pdep in pipeline_deps:
         pdep.name = strip_control_chars(pdep.name)
+        if _not_component(pdep.name):
+            continue  # ${ARGN} or self-dependency (Befund 47)
         # A conditional alternative carries its guard in context — it travels
         # marked (Befund 44), never as a present component.
         if pdep.ecosystem == "cmake" and pdep.context:

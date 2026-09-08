@@ -276,7 +276,7 @@ def _apply_cmake_conditions(
     marks ``absent`` are dropped; an ``conditional`` alternative carries its
     guard into ``context``. Done once, centrally, for all tiers.
     """
-    from embtrace_check.sbom.cmake_conditions import build_cmake_context, find_packages
+    from embtrace_check.sbom.cmake_conditions import build_cmake_context, find_dependencies
 
     if not any(d.ecosystem == "cmake" for d in deps):
         return deps
@@ -288,7 +288,12 @@ def _apply_cmake_conditions(
             content = Path(source).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for hit in find_packages(content, ctx):
+        # ALL dep-producing commands (find_library, pkg_check, …), not just
+        # find_package — an option-guarded find_library is an alternative too.
+        # A file under add_subdirectory(mbedtls) inherits its if(LWS_WITH_MBEDTLS)
+        # guard, so its find_library calls resolve to absent when the cache is off.
+        inherited = ctx.inherited_atoms(str(Path(source).parent.resolve()))
+        for hit in find_dependencies(content, ctx, inherited=inherited):
             states[(source, hit.name)] = (hit.state, hit.condition)
 
     kept: list[BuildFileDependency] = []

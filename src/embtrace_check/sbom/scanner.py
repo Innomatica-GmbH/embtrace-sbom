@@ -553,12 +553,15 @@ def scan_cmake(
             condition = hit.condition
             scope = "optional"
         elif ctx.has_cache:
-            # The build is configured — the cache is the source of truth
-            # (Befund 41): take the version it actually resolved.
+            # The build is CONFIGURED — the branch was decided by the cache, so
+            # this is a build-provenance component even when the cache carries
+            # no version for it (Befund 41/45: lifecycle hangs on the cache
+            # FILE, not on a variable hit — libwebsockets detects TLS in its own
+            # lib/tls/CMakeLists.txt, so the cache has no OPENSSL_VERSION).
+            source_kind = ""
             cache_ver = version_from_cache(hit.name, ctx)
             if cache_ver:
                 version = cache_ver
-                source_kind = ""  # a resolved version from the configured build
         deps.append(Dependency(
             name=hit.name,
             version=version,
@@ -1514,10 +1517,25 @@ def prefer_locked(deps: list[Dependency]) -> list[Dependency]:
 #: Directory names whose contents are test/example material — the
 #: components inside are real and stay listed, but scope "excluded"
 #: keeps them out of the traffic light (order collector-
-#: mehrfachversionen Befund 10; exactly the measured list).
+#: mehrfachversionen Befund 10; libwebsockets added test-apps/,
+#: minimal-examples*/ and contrib/ — Befund 46).
 _TEST_SCOPE_DIRS = frozenset({
-    "tests", "test", "examples", "fixtures", "samples", "benchmarks", "docs",
+    "tests", "test", "test-apps", "examples", "example",
+    "minimal-examples", "fixtures", "samples", "benchmarks", "docs",
+    "contrib",
 })
+
+
+def is_test_material_part(part: str) -> bool:
+    """True when a path segment marks test/example/contrib material (Befund 46).
+
+    Matches the exact names plus the common families — ``test-*`` (test-apps,
+    test-server) and anything with ``example`` in it (minimal-examples-lowlevel).
+    Such components are real and stay listed, but never gate the verdict and
+    never cost the customer a review question.
+    """
+    p = part.lower()
+    return p in _TEST_SCOPE_DIRS or p.startswith("test-") or "example" in p
 
 
 def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependency]:
@@ -1572,7 +1590,7 @@ def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependen
             rel_parts = current.relative_to(path).parts
         except ValueError:
             rel_parts = ()
-        if any(part.lower() in _TEST_SCOPE_DIRS for part in rel_parts):
+        if any(is_test_material_part(part) for part in rel_parts):
             for dep in found:
                 if not dep.scope and not dep.declared:
                     dep.scope = "excluded"

@@ -71,6 +71,18 @@ def strip_control_chars(name: str) -> str:
     return _CONTROL_CHARS.sub("", name).strip()
 
 
+#: Unexpanded CMake variables / generator expressions (``${ARGN}``, ``$<...>``)
+#: and other syntax that is never a real component name (Befund 47).
+_INVALID_NAME_CHARS = re.compile(r"[${}<>]")
+
+
+def is_invalid_name(name: str) -> bool:
+    """True when *name* is an unexpanded CMake variable or otherwise not a
+    real component name (empty after cleaning, or carrying ``${...}``)."""
+    clean = strip_control_chars(name)
+    return not clean or bool(_INVALID_NAME_CHARS.search(clean))
+
+
 def is_build_tool(name: str) -> bool:
     """True when *name* is a known build-system tool (case-insensitive)."""
     return name.strip().lower() in BUILD_TOOLS

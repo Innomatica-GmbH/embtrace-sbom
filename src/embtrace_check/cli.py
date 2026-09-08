@@ -223,7 +223,11 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
                 "embtrace-check can read build/CMakeCache.txt.\n"
                 "Adjust exclusions via a committed .embtraceignore."
             )
-        sys.exit(2)
+        # A read build system that yields nothing (self-contained) or only
+        # conditional backends is a VALID result, not a failure — a clean
+        # library run in CI must not fail (Befund 44 follow-up). Only "no
+        # build system found at all" stays exit 2.
+        sys.exit(2 if stats.build_files_scanned == 0 else 0)
 
     console.print(
         f"Found [bold]{len(real)}[/bold] components "
