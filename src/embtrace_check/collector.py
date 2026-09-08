@@ -28,7 +28,7 @@ from embtrace_check.sbom.classify import (
     is_invalid_name,
     strip_control_chars,
 )
-from embtrace_check.sbom.scanner import _TEST_SCOPE_DIRS, scan_directory_recursive
+from embtrace_check.sbom.scanner import is_test_material_part, scan_directory_recursive
 
 #: Deterministic pipeline tiers that need no tooling on the host.
 _DEFAULT_TIERS = frozenset({2, 4})
@@ -229,9 +229,12 @@ def collect_components(
         if key in merged:
             continue
         src_parts = Path(pdep.source_file).parts if pdep.source_file else ()
+        # Same family detection as the suite (Befund 52): test-apps/,
+        # minimal-examples*/, contrib/ … — not just the exact names, or the
+        # customer gets a DIFFERENT bill through the collector than the suite.
         pscope = (
             "excluded"
-            if any(part.lower() in _TEST_SCOPE_DIRS for part in src_parts)
+            if any(is_test_material_part(part) for part in src_parts)
             else ""
         )
         merged[key] = CheckComponent(
@@ -272,10 +275,28 @@ def collect_components(
     real = list(merged.values())
     components = real + conditional_comps
     ecosystems = sorted({c.ecosystem for c in real if c.ecosystem})
+
+    # Lifecycle mirrors the suite (Befund 52): a configured build (cache) or
+    # resolved output (lockfile / build output) is "build" provenance; only
+    # declarations is "design"; nothing found stays "".
+    from embtrace_check.sbom.cmake_conditions import build_cmake_context
+
+    has_cache = build_cmake_context(path).has_cache
+    resolved = any(
+        c.source_type in ("lockfile", "build-output", "declared") for c in real
+    )
+    if has_cache or resolved:
+        lifecycle = "build"
+    elif real or conditional_comps:
+        lifecycle = "design"
+    else:
+        lifecycle = ""
+
     stats = CheckStats(
         build_files_scanned=len(build_files),
         ecosystems=ecosystems,
         build_output_sources=build_output_sources,
         conditional=len(conditional_comps),
+        lifecycle=lifecycle,
     )
     return components, stats

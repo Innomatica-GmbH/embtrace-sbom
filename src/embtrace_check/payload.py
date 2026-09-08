@@ -64,6 +64,11 @@ class CheckStats(BaseModel):
     #: not part of the component count, surfaced so the report can prompt the
     #: customer to pick a backend / configure the build.
     conditional: int = 0
+    #: CycloneDX lifecycle phase of what was read (Befund 52 — the collector
+    #: must carry the same statement as the suite): "build" when a configured
+    #: build (CMakeCache.txt) or resolved output (lockfile/build output) was
+    #: read, "design" when only declarations were, "" when nothing was found.
+    lifecycle: str = ""
 
 
 class CheckPayload(BaseModel):

@@ -206,6 +206,11 @@ def parse(content: str) -> list[str]:
         name = m.group(1)
         if name.lower() in _SKIP_CMAKE_INCLUDES:
             continue
+        # An "…_import" helper IMPORTS a dependency, it is not one itself
+        # (Befund 52: cmake/pico_sdk_import.cmake became the component
+        # "pico_sdk_import" — the real dep, pico_sdk, is found inside it).
+        if name.lower().endswith(("_import", "-import")):
+            continue
         deps.add(name)
 
     # find_path — header search (extracts directory prefix as library name)
