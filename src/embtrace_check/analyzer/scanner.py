@@ -90,9 +90,36 @@ def collect_build_files(
     seen_paths: set[Path] = set()
     ignore_patterns = load_ignore_patterns(path)
 
+    import re as _re
+
+    # A directory holding CMakeCache.txt is a CONFIGURED BUILD TREE: its
+    # CMakeLists/*.cmake are generated (CMakeFiles/, cmake_install.cmake, …)
+    # and would inject dozens of phantom find_package hits (Befund 41). The
+    # cache itself is read separately as the source of truth; the tree is not
+    # a dependency source. Skip everything beneath such a directory.
+    build_trees = {
+        cache.parent.resolve()
+        for cache in path.glob("**/CMakeCache.txt")
+        if cache.is_file()
+    }
+
+    def _in_build_tree(p: Path) -> bool:
+        rp = p.resolve()
+        return any(bt == rp or bt in rp.parents for bt in build_trees)
+
     for pattern, file_type in BUILD_FILE_PATTERNS:
         for match in path.glob(pattern):
             if not match.is_file():
+                continue
+
+            if build_trees and _in_build_tree(match):
+                continue
+
+            # A Find<Name>.cmake module SEARCHES for a dependency — it is
+            # tooling, not a declaration (Befund 38, same class as Befund 34:
+            # libtls harvested from cmake/modules/FindLibreSSL.cmake). Never
+            # a dependency source.
+            if file_type == "cmake" and _re.fullmatch(r"Find.+\.cmake", match.name):
                 continue
 
             # Check depth
@@ -228,8 +255,50 @@ def analyze_with_pipeline(
         timeout_per_tool=timeout_per_tool,
     )
 
+    deps = _apply_cmake_conditions(deps, project_path)
+
     logger.info(
         "Pipeline complete: %d deps, %d artifacts, %d internal deps",
         len(deps), len(artifacts), len(internal),
     )
     return deps, artifacts, internal
+
+
+def _apply_cmake_conditions(
+    deps: list[BuildFileDependency], project_path: Path,
+) -> list[BuildFileDependency]:
+    """Reconcile pipeline CMake deps with the branch/option/cache truth.
+
+    Every tier (regex, tree-sitter, …) harvests ``find_package`` names flat.
+    A call on a branch the configured build did not take (``CMakeCache.txt``
+    decides ``PAHO_WITH_SSL=ON`` → no LibreSSL) must not survive here just
+    because a parser saw the source line (Befund 38/41). Names the cache
+    marks ``absent`` are dropped; an ``conditional`` alternative carries its
+    guard into ``context``. Done once, centrally, for all tiers.
+    """
+    from embtrace_check.sbom.cmake_conditions import build_cmake_context, find_packages
+
+    if not any(d.ecosystem == "cmake" for d in deps):
+        return deps
+
+    ctx = build_cmake_context(project_path)
+    states: dict[tuple[str, str], tuple[str, str]] = {}
+    for source in {d.source_file for d in deps if d.ecosystem == "cmake" and d.source_file}:
+        try:
+            content = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for hit in find_packages(content, ctx):
+            states[(source, hit.name)] = (hit.state, hit.condition)
+
+    kept: list[BuildFileDependency] = []
+    for dep in deps:
+        if dep.ecosystem == "cmake":
+            state = states.get((dep.source_file, dep.name))
+            if state is not None:
+                if state[0] == "absent":
+                    continue  # the configured build did not take this branch
+                if state[0] == "conditional" and not dep.context:
+                    dep.context = state[1]
+        kept.append(dep)
+    return kept

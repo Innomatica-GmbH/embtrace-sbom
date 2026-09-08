@@ -3,8 +3,9 @@
 Supports:
 - conan.lock / conanfile.txt  (C/C++ via Conan)
 - requirements.txt            (Python pip)
-- pyproject.toml              (Python — PEP 621/735 + Poetry; skipped when poetry.lock exists)
+- pyproject.toml              (Python — PEP 621/735 + Poetry; skipped when a lockfile exists)
 - poetry.lock                 (Python Poetry)
+- uv.lock                     (Python uv — resolved workspace closure)
 - Pipfile.lock                (Python Pipenv)
 - vcpkg.json                  (C/C++ vcpkg)
 - CMakeLists.txt              (CMake FetchContent/find_package, best-effort)
@@ -17,8 +18,8 @@ Supports:
 - go.sum                      (Go Modules)
 - alire.lock                  (Ada/SPARK Alire)
 - embtrace-deps.yaml          (manual declaration for proprietary libs)
-- *.hwh / *.xci / *.tcl / *.cxf  (FPGA IP cores — Vivado, Libero incl.
-                               generated-data version resolution, Quartus)
+- *.hwh / *.xci / *.tcl       (FPGA IP cores — Vivado IP-XACT VLNV, Libero
+                               core_vlnv, Quartus *_hw.tcl; matched by suffix)
 """
 
 from __future__ import annotations
@@ -35,6 +36,12 @@ import yaml
 from pydantic import BaseModel
 
 from embtrace_check.core.log import get_logger
+from embtrace_check.sbom.cmake_conditions import (
+    CMakeContext,
+    build_cmake_context,
+    find_packages,
+    version_from_cache,
+)
 
 logger = get_logger(__name__)
 
@@ -42,6 +49,22 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Dependency model
 # ---------------------------------------------------------------------------
+
+_RANGE_CHARS = re.compile(r"[\^~<>=*|,]|\s")
+
+
+def is_version_range(version: str) -> bool:
+    """True when *version* is a declaration range, not a concrete version.
+
+    ``^4.18.0``, ``~6.5.2``, ``>=2.0``, ``1.2 || 2.0``, ``4.x``, ``*`` —
+    CycloneDX demands a concrete version; a range in that field is a
+    false statement an assessor cannot check (Befund 30).
+    """
+    v = version.strip()
+    if not v:
+        return False
+    return bool(_RANGE_CHARS.search(v)) or v.endswith(".x") or v.lower() in ("x", "latest")
+
 
 class Dependency(BaseModel):
     """A single software dependency detected by scanning.
@@ -55,6 +78,16 @@ class Dependency(BaseModel):
     name: str
     version: str
     ecosystem: str  # conan, pypi, cmake, vcpkg, manual
+    #: True for a NESTED npm copy (node_modules/a/node_modules/b): it
+    #: is installed and belongs in the SBOM, but it must never be
+    #: compared against the project's own declaration — that invented
+    #: the "globals 14.0.0 erfüllt ^15.12.0 nicht"-conflict (Befund 28).
+    nested: bool = False
+    #: The DECLARED range when no resolved version exists ("^4.18.0",
+    #: "~6.5.2", ">=2.0"). A range is a wish, not a version — it never
+    #: goes into the CycloneDX version field (Befund 30); the generator
+    #: emits it as the property ``embtrace:declared-range`` instead.
+    declared_range: str = ""
     license: str | None = None
     supplier: str | None = None
     purl: str | None = None
@@ -67,14 +100,23 @@ class Dependency(BaseModel):
     # (see prefer_locked) — they are floors, not facts.
     source_kind: str = ""
     # CycloneDX component.scope ("required" | "optional" | "excluded"),
-    # "" = unknown. "excluded" marks test/example material and dev
-    # tooling — listed, never gating (Befund 10, way (b)).
+    # "" = unknown. npm lockfile v2/v3 marks pure build tooling with
+    # dev/devOptional → "excluded" (never ships in the artefact); this is
+    # SBOM honesty, NOT a query filter — dev components are still checked
+    # for vulnerabilities (order osv-chunking A4).
     scope: str = ""
     # True only for entries the customer wrote into embtrace-deps.yaml.
-    # A declaration is authoritative and is the ONLY class of component
-    # whose supplier/license/purl/cpe may travel in the check payload
-    # (order report-vollstaendigkeit).
+    # A declaration is authoritative (its supplier/license/purl/cpe were
+    # stated on purpose, they beat anything a database could guess) and,
+    # for the check collector, it is the ONLY class of component whose
+    # metadata may travel in the payload (order report-vollstaendigkeit).
     declared: bool = False
+    #: A CMake find_package guarded by an off-by-default option() is an
+    #: ALTERNATIVE, not a present component (Befund 38). When set, this
+    #: carries the plain-text guard ("nur bei: PAHO_WITH_LIBRESSL") and the
+    #: entry must never be reported as confirmed — the customer decides
+    #: which backend they build. Empty for unconditional dependencies.
+    condition: str = ""
 
     # ------------------------------------------------------------------
     # BSI TR-03183-2 v2.1.0 metadata (all optional, populated on demand)
@@ -140,6 +182,10 @@ def _make_purl(ecosystem: str, name: str, version: str) -> str:
     else:
         purl_name = name
 
+    # No version, no "@": "pkg:npm/express@" is not a valid purl, and a
+    # range there would be a false statement (Befund 30).
+    if not version or version == "*" or is_version_range(version):
+        return f"pkg:{purl_type}/{purl_name}"
     return f"pkg:{purl_type}/{purl_name}@{version}"
 
 
@@ -272,10 +318,10 @@ def _poetry_spec_version(spec: object) -> str:
 def scan_pyproject_toml(path: Path) -> list[Dependency]:
     """Parse a pyproject.toml (PEP 621, PEP 735 dependency-groups, Poetry).
 
-    Skipped entirely when a ``poetry.lock`` sits next to it — the lockfile
-    carries exact versions for the same dependency set and wins. Requirement
-    entries without any version constraint are skipped (no concrete version
-    to put into an SBOM).
+    Skipped entirely when a ``poetry.lock`` or ``uv.lock`` sits next to it —
+    those lockfiles carry the fully resolved closure for the same dependency
+    set and win. Requirement entries without any version constraint are
+    skipped (no concrete version to put into an SBOM).
     """
     deps: list[Dependency] = []
     for lockfile in ("poetry.lock", "uv.lock"):
@@ -435,7 +481,8 @@ def scan_vcpkg_json(path: Path) -> list[Dependency]:
 
     for entry in data.get("dependencies", []):
         if isinstance(entry, str):
-            # No pinned version — "" is the honest value, never "*".
+            # No pinned version — "" is the honest value, never "*"
+            # (order collector-embedded-buildsysteme Punkt 5).
             deps.append(Dependency(
                 name=entry,
                 version="",
@@ -461,14 +508,20 @@ _CMAKE_FETCH_CONTENT = re.compile(
     r"FetchContent_Declare\s*\(\s*(\w+).*?GIT_TAG\s+([v]?[\w._-]+)",
     re.DOTALL | re.IGNORECASE,
 )
-_CMAKE_FIND_PACKAGE = re.compile(
-    r"find_package\s*\(\s*(\w+)(?:\s+(\d[\w._-]*))?",
-    re.IGNORECASE,
-)
 
 
-def scan_cmake(path: Path) -> list[Dependency]:
-    """Best-effort scan of CMakeLists.txt for FetchContent and find_package."""
+def scan_cmake(
+    path: Path, *, cmake_ctx: CMakeContext | None = None,
+) -> list[Dependency]:
+    """Best-effort scan of CMakeLists.txt for FetchContent and find_package.
+
+    ``find_package`` is classified branch-, option- and cache-aware (Befund 38):
+    a call behind an off-by-default ``option()`` is an ALTERNATIVE — it carries
+    its guard in :attr:`Dependency.condition` and is never reported as present.
+    A ``CMakeCache.txt`` in the tree decides the build: branches not taken are
+    dropped. *cmake_ctx* is the project-wide option/cache context; when omitted
+    it is built from *path*'s directory (covers a standalone single-file scan).
+    """
     deps: list[Dependency] = []
     try:
         content = path.read_text(encoding="utf-8")
@@ -485,19 +538,35 @@ def scan_cmake(path: Path) -> list[Dependency]:
             purl=_make_purl("cmake", name, version),
         ))
 
-    for match in _CMAKE_FIND_PACKAGE.finditer(content):
-        name = match.group(1)
-        version = match.group(2) or ""  # "" honest, never "*"
-        # Skip CMake built-in modules
-        if name in ("Threads", "PkgConfig", "Python3", "Python", "GTest", "Doxygen"):
-            continue
+    ctx = cmake_ctx if cmake_ctx is not None else build_cmake_context(path.parent)
+    for hit in find_packages(content, ctx):
+        if hit.state == "absent":
+            continue  # the cache decides this branch is not built
+        version = hit.version
+        # find_package(X 1.2) declares a MINIMUM, not the linked version.
+        source_kind = "manifest"
+        scope = ""
+        condition = ""
+        if hit.state == "conditional":
+            # An alternative behind an off-by-default option — surfaced with
+            # its guard, never confirmed; optional in the generated SBOM.
+            condition = hit.condition
+            scope = "optional"
+        elif ctx.has_cache:
+            # The build is configured — the cache is the source of truth
+            # (Befund 41): take the version it actually resolved.
+            cache_ver = version_from_cache(hit.name, ctx)
+            if cache_ver:
+                version = cache_ver
+                source_kind = ""  # a resolved version from the configured build
         deps.append(Dependency(
-            name=name,
+            name=hit.name,
             version=version,
             ecosystem="cmake",
-            purl=_make_purl("cmake", name, version),
-            # find_package(X 1.2) declares a minimum, not the linked version.
-            source_kind="manifest",
+            purl=_make_purl("cmake", hit.name, version),
+            source_kind=source_kind,
+            condition=condition,
+            scope=scope,
         ))
 
     logger.info("Found %d dependencies in %s", len(deps), path)
@@ -507,9 +576,12 @@ def scan_cmake(path: Path) -> list[Dependency]:
 def scan_west_manifest(path: Path) -> list[Dependency]:
     """Parse a Zephyr ``west.yml`` manifest (the authoritative module list).
 
-    Every module with its repository and pinned revision — without this
-    parser a Zephyr workspace scan missed its entire dependency
-    declaration (order collector-embedded-buildsysteme).
+    The west manifest is the registry of the Zephyr world: every module
+    with its repository and pinned revision (order
+    wissensdatenbank-abdeckung-embedded, Stufe 4 — without this parser
+    a Zephyr workspace scan missed its entire dependency declaration).
+    The revision is taken verbatim as the version: tags are meaningful
+    versions, commit hashes are at least an exact pin — never a guess.
     """
     deps: list[Dependency] = []
     try:
@@ -573,11 +645,12 @@ def scan_embtrace_deps(path: Path) -> list[Dependency]:
         name = entry.get("name", "")
         version = entry.get("version", "")
         if name and version:
-            # Optional per-entry ecosystem (e.g. written by embtrace.check.convert);
+            # Optional per-entry ecosystem (e.g. written by embtrace_check.check.convert);
             # defaults to "manual" so existing declarations behave unchanged.
             ecosystem = str(entry.get("ecosystem") or "manual")
-            # A declared purl/cpe wins over anything synthesized (order
-            # report-vollstaendigkeit P0 — both were silently dropped).
+            # A declared purl/cpe wins over anything synthesized — the Zynq
+            # demo declared 57 purls and 3 CPEs that this parser silently
+            # dropped (order report-vollstaendigkeit P0).
             deps.append(Dependency(
                 name=name,
                 version=str(version),
@@ -644,12 +717,27 @@ def scan_package_lock_json(path: Path) -> list[Dependency]:
             # Extract name from path: "node_modules/@scope/name" → "@scope/name"
             parts = pkg_path.split("node_modules/")
             name = parts[-1] if parts else pkg_path
+            # More than one "node_modules/" = a nested copy another
+            # package pins for itself (Befund 28: position in the tree,
+            # not the name, decides what a declaration compares against).
+            nested = len(parts) > 2
+            # npm lockfile v2/v3 provenance: dev/devOptional = build
+            # tooling that never ships (CycloneDX "excluded"), optional =
+            # may be absent at runtime ("optional"); else production tree.
+            if info.get("dev") or info.get("devOptional"):
+                scope = "excluded"
+            elif info.get("optional"):
+                scope = "optional"
+            else:
+                scope = "required"
             if name:
                 deps.append(Dependency(
                     name=name,
                     version=version,
                     ecosystem="npm",
                     purl=_make_purl("npm", name, version),
+                    scope=scope,
+                    nested=nested,
                 ))
     else:
         # v1 fallback: "dependencies" dict
@@ -857,7 +945,8 @@ def scan_pom_xml(path: Path) -> list[Dependency]:
             name=name,
             version=version if version else "",
             ecosystem="maven",
-            purl=(_make_purl("maven", name, version) if version else f"pkg:maven/{name}"),
+            purl=(_make_purl("maven", name, version) if version
+                  else f"pkg:maven/{name}"),
         ))
 
     logger.info("Found %d dependencies in %s", len(deps), path)
@@ -1228,7 +1317,8 @@ _SCANNER_FUNCS = {
     "uv_lock": scan_uv_lock,
     "pipfile_lock": scan_pipfile_lock,
     "vcpkg_json": scan_vcpkg_json,
-    "cmake": scan_cmake,
+    # "cmake" is handled specially in scan_directory (it needs the project
+    # option/cache context) — deliberately not in this uniform-signature map.
     "embtrace_deps": scan_embtrace_deps,
     "west_manifest": scan_west_manifest,
     "cargo_lock": scan_cargo_lock,
@@ -1242,7 +1332,10 @@ _SCANNER_FUNCS = {
 }
 
 
-def scan_directory(path: Path, *, fpga_recursive: bool = True) -> list[Dependency]:
+def scan_directory(
+    path: Path, *, fpga_recursive: bool = True,
+    cmake_ctx: CMakeContext | None = None,
+) -> list[Dependency]:
     """Auto-detect and scan all supported dependency files in a directory.
 
     Args:
@@ -1252,18 +1345,26 @@ def scan_directory(path: Path, *, fpga_recursive: bool = True) -> list[Dependenc
             tree, so they are matched by suffix, not by fixed filename).
             :func:`scan_directory_recursive` disables this — its own walk
             visits every directory anyway.
+        cmake_ctx: Project-wide CMake option/cache context (Befund 41). When
+            omitted it is built from *path* — the recursive scanner passes a
+            single context so a ``find_package`` in a sub-directory sees the
+            ``option()`` defaults declared in the root ``CMakeLists.txt``.
 
     Returns:
         Combined list of all discovered dependencies (may contain duplicates).
     """
     all_deps: list[Dependency] = []
+    if cmake_ctx is None and (path / "CMakeLists.txt").is_file():
+        cmake_ctx = build_cmake_context(path)
 
     for filename, (scanner_key, _) in _SCANNERS.items():
         filepath = path / filename
         if filepath.is_file():
             logger.info("Detected %s", filepath)
-            scanner_fn = _SCANNER_FUNCS[scanner_key]
-            all_deps.extend(scanner_fn(filepath))
+            if scanner_key == "cmake":
+                all_deps.extend(scan_cmake(filepath, cmake_ctx=cmake_ctx))
+            else:
+                all_deps.extend(_SCANNER_FUNCS[scanner_key](filepath))
 
     # FPGA IP cores: a Vivado handoff (.hwh) already lists every core of a
     # block design — per-IP .xci files are only consulted when no handoff
@@ -1410,8 +1511,10 @@ def prefer_locked(deps: list[Dependency]) -> list[Dependency]:
     return kept
 
 
-#: Test/example directory names — components inside stay listed but
-#: carry scope "excluded" (never gating; Befund 10, way (b)).
+#: Directory names whose contents are test/example material — the
+#: components inside are real and stay listed, but scope "excluded"
+#: keeps them out of the traffic light (order collector-
+#: mehrfachversionen Befund 10; exactly the measured list).
 _TEST_SCOPE_DIRS = frozenset({
     "tests", "test", "examples", "fixtures", "samples", "benchmarks", "docs",
 })
@@ -1427,6 +1530,9 @@ def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependen
     (:data:`DEFAULT_EXCLUDE_DIRS`), hidden directories, and everything
     matched by a ``.embtraceignore`` at *path* are skipped.
 
+    This is used by the analyzer flow (``embtrace init --scan``) to find
+    lockfiles in mono-repos and nested sub-projects.
+
     Args:
         path: Root directory to scan.
         max_depth: Maximum directory depth to recurse into.
@@ -1437,6 +1543,10 @@ def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependen
     all_deps: list[Dependency] = []
     seen_dirs: set[Path] = set()
     ignore_patterns = load_ignore_patterns(path)
+    # One CMake context for the whole tree: option() defaults live in the root
+    # CMakeLists.txt, a find_package deep in src/; a configured build's
+    # CMakeCache.txt (in build/, _build/, …) is the source of truth (Befund 41).
+    cmake_ctx = build_cmake_context(path)
 
     def _walk(current: Path, depth: int) -> None:
         resolved = current.resolve()
@@ -1444,8 +1554,20 @@ def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependen
             return
         seen_dirs.add(resolved)
 
-        # Scan this directory
-        found = scan_directory(current, fpga_recursive=False)
+        # A directory holding CMakeCache.txt is a build tree — its generated
+        # CMakeLists/.cmake would inject phantom find_package hits. Its cache
+        # is already folded into cmake_ctx; do not scan or descend into it.
+        if (current / "CMakeCache.txt").is_file() and current != path:
+            return
+
+        # Scan this directory (FPGA sweep off — this walk visits every dir)
+        found = scan_directory(current, fpga_recursive=False, cmake_ctx=cmake_ctx)
+        # Test/example material travels, but marked: scope "excluded"
+        # keeps it out of the traffic light while hiding nothing
+        # (order collector-mehrfachversionen Befund 10, way (b) — a
+        # vulnerable flask 0.12.2 from tests/fixtures/ must never gate
+        # the product verdict, and must never be silently dropped
+        # either). Declarations keep their author's word untouched.
         try:
             rel_parts = current.relative_to(path).parts
         except ValueError:

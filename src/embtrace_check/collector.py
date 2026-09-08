@@ -18,9 +18,15 @@ from pathlib import Path
 
 from embtrace_check.analyzer.normalize import normalize_dep_name
 from embtrace_check.analyzer.pipeline import run_pipeline
-from embtrace_check.analyzer.scanner import collect_build_files
+from embtrace_check.analyzer.scanner import _apply_cmake_conditions, collect_build_files
 from embtrace_check.core.exceptions import CheckCollectionError
 from embtrace_check.payload import CheckComponent, CheckStats
+from embtrace_check.sbom.classify import (
+    _C_KEYWORDS,
+    _looks_like_library,
+    clean_dependency,
+    strip_control_chars,
+)
 from embtrace_check.sbom.scanner import _TEST_SCOPE_DIRS, scan_directory_recursive
 
 #: Deterministic pipeline tiers that need no tooling on the host.
@@ -40,6 +46,30 @@ _LOCKFILE_TIER = 2
 _NAME_ONLY_ECOSYSTEMS = frozenset({
     "cmake", "meson", "make", "autotools", "configure", "generic",
 })
+
+
+def _is_parser_noise(name: str, version: str, ecosystem: str) -> bool:
+    """DB-free parser-noise check (Befund 13, collector flavour).
+
+    The collector has no knowledge DB — the SERVER does the authoritative
+    suspect classification. So the collector only drops what is noise
+    *regardless* of a DB: a C keyword (``int``), an empty name, or a single
+    character (``n`` harvested from ``-ln``). An ambiguous capitalized word
+    (``OpenSSL``, ``Packet``) is kept and sent — dropping it here would lose a
+    real library, because unlike the suite there is no DB to vouch for it.
+    """
+    if version and version != "*":
+        return False  # a resolved version is trust
+    if ecosystem not in _NAME_ONLY_ECOSYSTEMS:
+        return False
+    clean = strip_control_chars(name)
+    if not clean:
+        return True
+    if clean.lower() in _C_KEYWORDS:
+        return True
+    if _looks_like_library(clean):
+        return False
+    return len(clean) <= 1
 
 
 def collect_components(
@@ -79,6 +109,13 @@ def collect_components(
     # collector-mehrfachversionen).
     merged: dict[tuple[str, str], CheckComponent] = {}
     for dep in scan_directory_recursive(path, max_depth=max_depth):
+        # Control-char hygiene FIRST (Befund 15 — a scanner once read colored
+        # tool output), so the dedup key and the uploaded payload are clean.
+        clean_dependency(dep)
+        # A find_package behind an off-by-default option is an ALTERNATIVE,
+        # not a component of the default build (Befund 38) — never uploaded.
+        if dep.condition:
+            continue
         key = (normalize_dep_name(dep.name), dep.version)
         if key in merged:
             continue
@@ -91,6 +128,10 @@ def collect_components(
             and dep.ecosystem in _NAME_ONLY_ECOSYSTEMS
             and is_skipped(dep.name)
         ):
+            continue
+        # Parser noise the collector can judge without a DB — int/char/n
+        # (Befund 13); ambiguous names go to the server, which has the DB.
+        if not dep.declared and _is_parser_noise(dep.name, dep.version, dep.ecosystem):
             continue
         # Entries from embtrace-deps.yaml are the customer's own SBOM
         # declaration: they keep the metadata written there (opt-out via
@@ -128,11 +169,24 @@ def collect_components(
     pipeline_deps, _artifacts, _internal = run_pipeline(
         path, build_files, enabled_tiers=tiers
     )
+    # Reconcile CMake find_package hits with the branch/option/cache truth
+    # (Befund 38/41): drop names the configured build did not take, mark an
+    # off-by-default alternative's guard into context. run_pipeline does not
+    # do this itself, so the collector must (the suite does it in
+    # analyze_with_pipeline).
+    pipeline_deps = _apply_cmake_conditions(pipeline_deps, path)
     seen_names = {name for name, _version in merged}
     for pdep in pipeline_deps:
+        pdep.name = strip_control_chars(pdep.name)
+        # A conditional alternative carries its guard in context — not a
+        # component of the default build (Befund 38).
+        if pdep.ecosystem == "cmake" and pdep.context:
+            continue
         if normalize_dep_name(pdep.name) in seen_names:
             continue
         if pdep.ecosystem in _NAME_ONLY_ECOSYSTEMS and is_skipped(pdep.name):
+            continue
+        if _is_parser_noise(pdep.name, pdep.version, pdep.ecosystem):
             continue
         key = (normalize_dep_name(pdep.name), pdep.version)
         if key in merged:
@@ -161,6 +215,7 @@ def collect_components(
         path, max_depth=max_depth,
     )
     for dep in build_output_deps:
+        clean_dependency(dep)  # control-char hygiene (Befund 15)
         # Resolved, installed packages — the skip list never applies.
         key = (normalize_dep_name(dep.name), dep.version)
         if key in merged:
