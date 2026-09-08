@@ -276,6 +276,28 @@ def collect_components(
     components = real + conditional_comps
     ecosystems = sorted({c.ecosystem for c in real if c.ecosystem})
 
+    # Inc-2 twin (Reihe 19): resolve system-library VERSIONS from the
+    # machine the customer runs on (pkg-config, sysroot-aware). Under the
+    # data-minimisation promise only the VERSION travels for discovered
+    # components — supplier/license stay reserved for declarations; the
+    # server enriches from its own knowledge base.
+    from embtrace_check.sbom.scanner import Dependency as _Dep
+    from embtrace_check.sbom.sysresolve import resolve_system_libraries
+
+    _to_resolve: list[_Dep] = []
+    _by_key: dict[tuple[str, str], CheckComponent] = {}
+    for comp in real:
+        if comp.ecosystem in ("cmake", "make", "meson", "autotools",
+                              "configure", "generic") and not comp.version:
+            d = _Dep(name=comp.name, version="", ecosystem=comp.ecosystem)
+            _to_resolve.append(d)
+            _by_key[(comp.name, comp.ecosystem)] = comp
+    if _to_resolve:
+        resolve_system_libraries(_to_resolve)
+        for d in _to_resolve:
+            if d.version:
+                _by_key[(d.name, d.ecosystem)].version = d.version
+
     # Lifecycle mirrors the suite (Befund 52): a configured build (cache) or
     # resolved output (lockfile / build output) is "build" provenance; only
     # declarations is "design"; nothing found stays "".

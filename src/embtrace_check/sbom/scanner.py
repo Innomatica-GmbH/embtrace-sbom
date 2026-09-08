@@ -111,6 +111,20 @@ class Dependency(BaseModel):
     # for the check collector, it is the ONLY class of component whose
     # metadata may travel in the payload (order report-vollstaendigkeit).
     declared: bool = False
+    #: Version of the DISTRIBUTION package the build links against
+    #: (``3.0.13-0ubuntu3.15``) — the patch level that decides which CVEs
+    #: are actually fixed (Reihe 19, Increment 2). Upstream stays in
+    #: ``version``; both are shown, neither replaces the other.
+    distro_version: str = ""
+    #: Where the system resolver got its answer ("pkg-config (Host)" /
+    #: "pkg-config (Sysroot)"), "" when nothing was resolved.
+    resolved_from: str = ""
+    #: Distribution SOURCE package (dpkg ${source:Package}: "openssl", not
+    #: "libssl-dev") — OSV Ubuntu/Debian advisories key by it (Rest 1).
+    distro_source: str = ""
+    #: OSV ecosystem of the resolving system ("Ubuntu:24.04") — the distro
+    #: view whose advisories decide the shipped patch level.
+    distro_ecosystem: str = ""
     #: A CMake find_package guarded by an off-by-default option() is an
     #: ALTERNATIVE, not a present component (Befund 38). When set, this
     #: carries the plain-text guard ("nur bei: PAHO_WITH_LIBRESSL") and the
@@ -539,6 +553,8 @@ def scan_cmake(
         ))
 
     ctx = cmake_ctx if cmake_ctx is not None else build_cmake_context(path.parent)
+    from embtrace_check.sbom.classify import is_build_tool
+
     for hit in find_packages(content, ctx):
         if hit.state == "absent":
             continue  # the cache decides this branch is not built
@@ -547,6 +563,11 @@ def scan_cmake(
         source_kind = "manifest"
         scope = ""
         condition = ""
+        # Tooling is never a decision for the customer (Befund 57): a known
+        # build tool (Git) or a project Find module that only locates a
+        # PROGRAM (OpenSSLbins) travels marked excluded — listed, never asked.
+        if hit.name in ctx.program_modules or is_build_tool(hit.name):
+            scope = "excluded"
         if hit.state == "conditional":
             # An alternative behind an off-by-default option — surfaced with
             # its guard, never confirmed; optional in the generated SBOM.
@@ -1338,6 +1359,7 @@ _SCANNER_FUNCS = {
 def scan_directory(
     path: Path, *, fpga_recursive: bool = True,
     cmake_ctx: CMakeContext | None = None,
+    cmake_extra_cache: Path | None = None,
 ) -> list[Dependency]:
     """Auto-detect and scan all supported dependency files in a directory.
 
@@ -1358,7 +1380,7 @@ def scan_directory(
     """
     all_deps: list[Dependency] = []
     if cmake_ctx is None and (path / "CMakeLists.txt").is_file():
-        cmake_ctx = build_cmake_context(path)
+        cmake_ctx = build_cmake_context(path, extra_cache=cmake_extra_cache)
 
     for filename, (scanner_key, _) in _SCANNERS.items():
         filepath = path / filename
@@ -1538,7 +1560,9 @@ def is_test_material_part(part: str) -> bool:
     return p in _TEST_SCOPE_DIRS or p.startswith("test-") or "example" in p
 
 
-def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependency]:
+def scan_directory_recursive(
+    path: Path, *, max_depth: int = 5, cmake_extra_cache: Path | None = None,
+) -> list[Dependency]:
     """Recursively scan a directory tree for dependency files.
 
     Walks all subdirectories up to *max_depth* and calls :func:`scan_directory`
@@ -1564,7 +1588,7 @@ def scan_directory_recursive(path: Path, *, max_depth: int = 5) -> list[Dependen
     # One CMake context for the whole tree: option() defaults live in the root
     # CMakeLists.txt, a find_package deep in src/; a configured build's
     # CMakeCache.txt (in build/, _build/, …) is the source of truth (Befund 41).
-    cmake_ctx = build_cmake_context(path)
+    cmake_ctx = build_cmake_context(path, extra_cache=cmake_extra_cache)
 
     def _walk(current: Path, depth: int) -> None:
         resolved = current.resolve()

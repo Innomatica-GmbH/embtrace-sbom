@@ -230,6 +230,7 @@ def analyze_with_pipeline(
     backend: InferenceBackend | None = None,
     enabled_tiers: set[int] | None = None,
     timeout_per_tool: float = 30.0,
+    cmake_extra_cache: Path | None = None,
 ) -> tuple[list[BuildFileDependency], list[BuildFileArtifact], list[BuildFileInternalDep]]:
     """Analyze build files using the multi-tier scanner pipeline.
 
@@ -255,7 +256,9 @@ def analyze_with_pipeline(
         timeout_per_tool=timeout_per_tool,
     )
 
-    deps = _apply_cmake_conditions(deps, project_path)
+    deps = _apply_cmake_conditions(
+        deps, project_path, extra_cache=cmake_extra_cache,
+    )
 
     logger.info(
         "Pipeline complete: %d deps, %d artifacts, %d internal deps",
@@ -266,6 +269,7 @@ def analyze_with_pipeline(
 
 def _apply_cmake_conditions(
     deps: list[BuildFileDependency], project_path: Path,
+    *, extra_cache: Path | None = None,
 ) -> list[BuildFileDependency]:
     """Reconcile pipeline CMake deps with the branch/option/cache truth.
 
@@ -281,7 +285,7 @@ def _apply_cmake_conditions(
     if not any(d.ecosystem == "cmake" for d in deps):
         return deps
 
-    ctx = build_cmake_context(project_path)
+    ctx = build_cmake_context(project_path, extra_cache=extra_cache)
     states: dict[tuple[str, str], tuple[str, str]] = {}
     for source in {d.source_file for d in deps if d.ecosystem == "cmake" and d.source_file}:
         try:

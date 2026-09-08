@@ -93,6 +93,11 @@ class CMakeContext:
     cache: dict[str, str] = field(default_factory=dict)
     #: True when at least one CMakeCache.txt was found — the build is decided.
     has_cache: bool = False
+    #: Find modules in the project tree that only locate a PROGRAM
+    #: (find_program, no find_library/find_path/pkg_check): their
+    #: find_package() names are tooling, never product components
+    #: (Befund 57: lws' FindOpenSSLbins.cmake finds the openssl BINARY).
+    program_modules: set[str] = field(default_factory=set)
     #: resolved child dir → (resolved parent dir, guard atoms) — a subdirectory
     #: added under ``if(LWS_WITH_MBEDTLS) add_subdirectory(mbedtls)`` inherits
     #: that guard, and so does every find_library inside it (Befund 46).
@@ -612,7 +617,9 @@ def _is_find_module(path: Path) -> bool:
     return bool(re.fullmatch(r"Find.+\.cmake", path.name))
 
 
-def build_cmake_context(root: Path, *, max_depth: int = 5) -> CMakeContext:
+def build_cmake_context(
+    root: Path, *, max_depth: int = 5, extra_cache: Path | None = None,
+) -> CMakeContext:
     """Collect option defaults and cache values across the whole project.
 
     ``option()`` declarations live in the top-level ``CMakeLists.txt`` while a
@@ -643,13 +650,23 @@ def build_cmake_context(root: Path, *, max_depth: int = 5) -> CMakeContext:
                 if depth >= max_depth or name.startswith(".") or name in _SKIP_DIRS:
                     continue
                 _walk(entry, depth + 1)
-            elif (
-                (name == "CMakeLists.txt" or name.endswith(".cmake"))
-                and not _is_find_module(entry)
-            ):
+            elif name == "CMakeLists.txt" or name.endswith(".cmake"):
                 try:
                     text = entry.read_text(encoding="utf-8", errors="replace")
                 except OSError:
+                    continue
+                if _is_find_module(entry):
+                    # Never harvested for options/deps — but a module that
+                    # only runs find_program locates a TOOL: its
+                    # find_package() name must never become a component
+                    # question (Befund 57, FindOpenSSLbins.cmake).
+                    low = text.lower()
+                    if "find_program" in low and not any(
+                        k in low for k in
+                        ("find_library", "find_path", "pkg_check_modules",
+                         "pkg_search_module")
+                    ):
+                        ctx.program_modules.add(entry.name[4:-6])  # Find<X>.cmake
                     continue
                 _parse_options(text, ctx.options)
                 # add_subdirectory(X) under a guard makes X (and its find_library
@@ -660,6 +677,11 @@ def build_cmake_context(root: Path, *, max_depth: int = 5) -> CMakeContext:
                         ctx.added_by[child] = (parent, atom_tuples)
 
     _walk(root, 0)
+    if extra_cache is not None and extra_cache.is_file():
+        # A configuration produced OUTSIDE the tree (init --scan --configure
+        # writes into a temp dir, Increment 4) — the build is decided by it.
+        _load_cache(extra_cache, ctx.cache)
+        ctx.has_cache = True
     if ctx.options or ctx.cache:
         logger.info(
             "CMake context: %d option(s), %d cache value(s)%s",
