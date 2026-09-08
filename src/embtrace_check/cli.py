@@ -171,34 +171,75 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         with_tools=with_tools,
         include_declared_metadata=not no_declared_metadata,
     )
+    # Conditional alternatives travel MARKED, not as components (Befund 44).
+    real = [c for c in components if not c.condition]
+    conditional = [c for c in components if c.condition]
 
-    if not components:
-        # An empty report is the worst possible answer — say what would
-        # have been found where.
-        console.print(
-            "[yellow]No supported build system found in this directory."
-            "[/yellow]\n"
-            "Recognised: Conan, vcpkg, CMake, Cargo, npm/yarn/pnpm, Python "
-            "(pip/poetry/uv/pipenv), Go, Maven/Gradle, Alire, Zephyr "
-            "(west.yml), FPGA projects (Vivado/Libero/Quartus) — and "
-            "Yocto/Buildroot BUILD OUTPUT.\n"
-            "For Yocto/Buildroot: run the check in your BUILD directory "
-            "(it reads deploy/images/*.manifest resp. "
-            "legal-info/manifest.csv), not in the recipe source tree.\n"
-            "For proprietary components without a package manager: declare "
-            "them once in embtrace-deps.yaml and re-run.\n"
-            "Adjust exclusions via a committed .embtraceignore."
-        )
+    if not real:
+        # An empty report is the worst possible answer — but WHY it is empty
+        # differs, and telling a CMake customer "no build system found" when
+        # their CMakeLists.txt was read is the Befund-42 mistake (describing
+        # the tool, not their project). Three cases, three texts.
+        if stats.build_files_scanned == 0:
+            console.print(
+                "[yellow]No supported build system found in this directory."
+                "[/yellow]\n"
+                "Recognised: Conan, vcpkg, CMake, Cargo, npm/yarn/pnpm, Python "
+                "(pip/poetry/uv/pipenv), Go, Maven/Gradle, Alire, Zephyr "
+                "(west.yml), FPGA projects (Vivado/Libero/Quartus) — and "
+                "Yocto/Buildroot BUILD OUTPUT.\n"
+                "For Yocto/Buildroot: run the check in your BUILD directory "
+                "(it reads deploy/images/*.manifest resp. "
+                "legal-info/manifest.csv), not in the recipe source tree.\n"
+                "For proprietary components without a package manager: declare "
+                "them once in embtrace-deps.yaml and re-run.\n"
+                "Adjust exclusions via a committed .embtraceignore."
+            )
+        elif conditional:
+            # Build files WERE read; the default build has no components, but
+            # optional backends are available behind a build option.
+            names = ", ".join(sorted(c.name for c in conditional)[:4])
+            console.print(
+                "[yellow]No components in the DEFAULT build.[/yellow]\n"
+                f"{len(conditional)} optional backend(s) are available behind "
+                f"a build option ({names}): no default build contains them, "
+                "and mutually exclusive ones (OpenSSL or LibreSSL) never both "
+                "ship.\n"
+                "Configure the build once (e.g. `cmake -S . -B build "
+                "-DWITH_SSL=ON`) so embtrace-check reads which you actually "
+                "use, or declare it in embtrace-deps.yaml."
+            )
+        else:
+            # Build files read, genuinely nothing — self-contained.
+            console.print(
+                "[yellow]No external components found.[/yellow]\n"
+                f"Read {stats.build_files_scanned} build file(s) "
+                f"({', '.join(stats.ecosystems) or 'no package manager'}); "
+                "no third-party packages are declared. For a self-contained "
+                "library that is plausible.\n"
+                "If you link system libraries via `-l` or vendor foreign code "
+                "(third_party/, vendor/), declare it in embtrace-deps.yaml — "
+                "or configure the build once (e.g. `cmake -S . -B build`) so "
+                "embtrace-check can read build/CMakeCache.txt.\n"
+                "Adjust exclusions via a committed .embtraceignore."
+            )
         sys.exit(2)
 
     console.print(
-        f"Found [bold]{len(components)}[/bold] components "
+        f"Found [bold]{len(real)}[/bold] components "
         f"({', '.join(stats.ecosystems) or 'no ecosystem info'}) "
         f"in {stats.build_files_scanned} build files."
     )
+    if conditional:
+        names = ", ".join(sorted(c.name for c in conditional)[:4])
+        console.print(
+            f"[dim]{len(conditional)} conditional alternative(s) behind build "
+            f"options ({names}) — marked, not counted, not gating. Configure "
+            f"the build to resolve which is used.[/dim]"
+        )
     for src in stats.build_output_sources:
         console.print(f"[dim]Build output: {src}[/dim]")
-    mehrfach = len(components) - len({c.name.lower() for c in components})
+    mehrfach = len(real) - len({c.name.lower() for c in real})
     if mehrfach:
         console.print(
             f"[dim]{mehrfach} additional version(s) of already-listed "

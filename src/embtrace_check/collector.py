@@ -108,13 +108,33 @@ def collect_components(
     # the older nested one is often the vulnerable one (order
     # collector-mehrfachversionen).
     merged: dict[tuple[str, str], CheckComponent] = {}
+    # Conditional ALTERNATIVES travel MARKED, not dropped (Befund 44): the
+    # report can then say "your project can be built with OpenSSL or LibreSSL
+    # — configure once". They are never counted as components, never gating.
+    conditional_comps: list[CheckComponent] = []
+    conditional_seen: set[str] = set()
+
+    def _add_conditional(name: str, version: str, ecosystem: str,
+                         condition: str, tier: int) -> None:
+        ckey = normalize_dep_name(name)
+        if ckey in conditional_seen:
+            return
+        conditional_seen.add(ckey)
+        conditional_comps.append(CheckComponent(
+            name=name, version=version, ecosystem=ecosystem,
+            source_type="conditional", tier=tier, confidence=0.0,
+            condition=condition, scope="excluded",
+        ))
+
     for dep in scan_directory_recursive(path, max_depth=max_depth):
         # Control-char hygiene FIRST (Befund 15 — a scanner once read colored
         # tool output), so the dedup key and the uploaded payload are clean.
         clean_dependency(dep)
-        # A find_package behind an off-by-default option is an ALTERNATIVE,
-        # not a component of the default build (Befund 38) — never uploaded.
+        # A find_package behind an off-by-default option is an ALTERNATIVE —
+        # it travels marked with its guard, never as a present component.
         if dep.condition:
+            _add_conditional(dep.name, dep.version, dep.ecosystem,
+                             dep.condition, _LOCKFILE_TIER)
             continue
         key = (normalize_dep_name(dep.name), dep.version)
         if key in merged:
@@ -178,9 +198,12 @@ def collect_components(
     seen_names = {name for name, _version in merged}
     for pdep in pipeline_deps:
         pdep.name = strip_control_chars(pdep.name)
-        # A conditional alternative carries its guard in context — not a
-        # component of the default build (Befund 38).
+        # A conditional alternative carries its guard in context — it travels
+        # marked (Befund 44), never as a present component.
         if pdep.ecosystem == "cmake" and pdep.context:
+            if normalize_dep_name(pdep.name) not in seen_names:
+                _add_conditional(pdep.name, pdep.version, pdep.ecosystem,
+                                 pdep.context, pdep.tier)
             continue
         if normalize_dep_name(pdep.name) in seen_names:
             continue
@@ -229,11 +252,16 @@ def collect_components(
             confidence=_LOCKFILE_CONFIDENCE,
         )
 
-    components = list(merged.values())
-    ecosystems = sorted({c.ecosystem for c in components if c.ecosystem})
+    # Real components first, then the marked alternatives (Befund 44). The
+    # component COUNT and the ecosystem list cover only real components; the
+    # conditional ones are surfaced through stats.conditional.
+    real = list(merged.values())
+    components = real + conditional_comps
+    ecosystems = sorted({c.ecosystem for c in real if c.ecosystem})
     stats = CheckStats(
         build_files_scanned=len(build_files),
         ecosystems=ecosystems,
         build_output_sources=build_output_sources,
+        conditional=len(conditional_comps),
     )
     return components, stats

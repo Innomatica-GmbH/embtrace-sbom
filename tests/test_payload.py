@@ -83,6 +83,7 @@ def test_payload_json_contains_no_paths() -> None:
         "purl",
         "cpe",
         "scope",
+        "condition",
     }
     assert "/" not in json.dumps([c["source_type"] for c in parsed["components"]])
     assert len(raw.encode()) < MAX_PAYLOAD_BYTES

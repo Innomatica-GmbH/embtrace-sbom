@@ -44,6 +44,13 @@ class CheckComponent(BaseModel):
     #: CycloneDX scope — "excluded" marks test/example material and dev
     #: tooling: listed, but never gating.
     scope: str = ""
+    #: A CMake find_package behind an off-by-default option is an ALTERNATIVE,
+    #: not a component of the default build (Befund 38/44). When set, this
+    #: carries the plain-text guard ("nur bei: PAHO_WITH_LIBRESSL"): the
+    #: component travels MARKED so the report can say "your project can be
+    #: built with OpenSSL or LibreSSL — configure once", but it is never
+    #: counted as a present component and never gates the traffic light.
+    condition: str = ""
 
 
 class CheckStats(BaseModel):
@@ -53,6 +60,10 @@ class CheckStats(BaseModel):
     ecosystems: list[str] = Field(default_factory=list)
     #: Human-readable build-output sources (file NAMES only, never paths).
     build_output_sources: list[str] = Field(default_factory=list)
+    #: Number of conditional ALTERNATIVES carried in the payload (Befund 44) —
+    #: not part of the component count, surfaced so the report can prompt the
+    #: customer to pick a backend / configure the build.
+    conditional: int = 0
 
 
 class CheckPayload(BaseModel):
