@@ -49,6 +49,23 @@ _NAME_ONLY_ECOSYSTEMS = frozenset({
 })
 
 
+def _project_name(path: Path) -> str:
+    """Project identity for the self-reference filter (Befund 75): the name in
+    embtrace.yaml if the tree carries one, else the directory name — the same
+    precedence the suite uses, so both tools agree on what "self" is."""
+    cfg = path / "embtrace.yaml"
+    if cfg.is_file():
+        try:
+            import yaml
+            data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+            name = (data.get("project") or {}).get("name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+        except (OSError, ValueError, yaml.YAMLError):
+            pass
+    return path.resolve().name
+
+
 def _is_parser_noise(name: str, version: str, ecosystem: str) -> bool:
     """DB-free parser-noise check (Befund 13, collector flavour).
 
@@ -110,7 +127,21 @@ def collect_components(
     # collector-mehrfachversionen).
     # The project's own name (its directory) is not a third-party component;
     # neither is an unexpanded CMake variable (Befund 47).
-    proj = normalize_dep_name(path.resolve().name)
+    # Self-reference identity from the same source as the suite (Befund 75):
+    # the project name in embtrace.yaml when present, else the directory name.
+    # (The suite filters self-refs by its --project/config name; a measurement
+    # in a differently-named copy dir must not diverge.)
+    proj = normalize_dep_name(_project_name(path))
+
+    # One CMake context for both paths (Befund 75): tool + program-module
+    # classification must match scan_cmake / the suite reconciler exactly.
+    from embtrace_check.sbom.classify import is_build_tool
+    from embtrace_check.sbom.cmake_conditions import build_cmake_context
+
+    cmake_ctx = build_cmake_context(path)
+
+    def _is_tooling(name: str) -> bool:
+        return is_build_tool(name) or name in cmake_ctx.program_modules
 
     def _not_component(name: str) -> bool:
         return is_invalid_name(name) or (
@@ -150,6 +181,21 @@ def collect_components(
             continue
         key = (normalize_dep_name(dep.name), dep.version)
         if key in merged:
+            continue
+        # A tool / program-only Find module the scanner already marked
+        # excluded (Git, OpenSSLbins) is LISTED as excluded — exactly like
+        # the suite — never dropped by the skip list, so both tools show the
+        # customer the same excluded set (Befund 75 issue 4).
+        if not dep.declared and dep.scope == "excluded" and _is_tooling(dep.name):
+            merged[key] = CheckComponent(
+                name=dep.name,
+                version=dep.version,
+                ecosystem=dep.ecosystem,
+                source_type=dep.source_kind or "build-file",
+                tier=_LOCKFILE_TIER,
+                confidence=_MANIFEST_CONFIDENCE,
+                scope="excluded",
+            )
             continue
         # Curated skip list (build tools, system libs) applies only to
         # name tokens from build scripts — a resolved lockfile entry is
@@ -212,13 +258,6 @@ def collect_components(
         pdep.name = strip_control_chars(pdep.name)
         if _not_component(pdep.name):
             continue  # ${ARGN} or self-dependency (Befund 47)
-        # A conditional alternative carries its guard in context — it travels
-        # marked (Befund 44), never as a present component.
-        if pdep.ecosystem == "cmake" and pdep.context:
-            if normalize_dep_name(pdep.name) not in seen_names:
-                _add_conditional(pdep.name, pdep.version, pdep.ecosystem,
-                                 pdep.context, pdep.tier)
-            continue
         if normalize_dep_name(pdep.name) in seen_names:
             continue
         if pdep.ecosystem in _NAME_ONLY_ECOSYSTEMS and is_skipped(pdep.name):
@@ -229,13 +268,25 @@ def collect_components(
         if key in merged:
             continue
         src_parts = Path(pdep.source_file).parts if pdep.source_file else ()
-        # Same family detection as the suite (Befund 52): test-apps/,
-        # minimal-examples*/, contrib/ … — not just the exact names, or the
-        # customer gets a DIFFERENT bill through the collector than the suite.
-        pscope = (
-            "excluded"
-            if any(is_test_material_part(part) for part in src_parts)
-            else ""
+        # A ≤2-char token from test material is a stripped linker flag
+        # (`-lev`→ev, `-luv`→uv), not a component — the suite drops these
+        # (Befund 75 parity); keeping them only cluttered the excluded list.
+        if (
+            not pdep.version
+            and len(strip_control_chars(pdep.name)) <= 2
+            and any(is_test_material_part(part) for part in src_parts)
+        ):
+            continue
+        # Scope mirrors the suite reconciler + scan_cmake exactly (Befund 75):
+        # excluded ⟺ test/example/contrib material, a known build tool, or a
+        # project Find module that only locates a PROGRAM (Git, OpenSSLbins).
+        # A pipeline `context` (an option guard the no-cache build can't
+        # decide) is informational — it does NOT make the dep a conditional
+        # the way a configured scan_cmake `.condition` does; the suite lists
+        # exactly these as open build_file_only entries (scope ""), so the
+        # collector must too (mbedtls/wolfssl/opus were wrongly excluded).
+        is_excluded = any(is_test_material_part(part) for part in src_parts) or (
+            pdep.ecosystem in _NAME_ONLY_ECOSYSTEMS and _is_tooling(pdep.name)
         )
         merged[key] = CheckComponent(
             name=pdep.name,
@@ -244,7 +295,7 @@ def collect_components(
             source_type=pdep.detection_method or "build-file",
             tier=pdep.tier,
             confidence=pdep.confidence,
-            scope=pscope,
+            scope="excluded" if is_excluded else "",
         )
 
     # Path 3: Yocto/Buildroot BUILD OUTPUT — what is actually in the
