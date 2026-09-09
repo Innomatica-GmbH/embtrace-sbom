@@ -331,6 +331,9 @@ class PackageJsonParser:
                     version=str(version) if isinstance(version, str) else "",
                     ecosystem="npm",
                     source_file=str(file_path),
+                    # Section = provenance: devDependencies never ship —
+                    # the accept path maps this to scope "excluded".
+                    context=section,
                     confidence=_CONFIDENCE,
                     tier=self.tier,
                     detection_method="json-package",

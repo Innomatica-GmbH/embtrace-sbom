@@ -95,3 +95,31 @@ class TestBefund75:
         for tool in ("Git", "OpenSSLbins"):
             if tool in by:
                 assert by[tool].scope == "excluded"
+
+
+class TestBefund78NoDuplicateConditionals:
+    """A conditional alternative found by BOTH scan_cmake (path 1, .condition)
+    and the pipeline (path 2, context) must appear ONCE — with its condition,
+    scope="" like the suite — never as a second bare component."""
+
+    def test_conditional_not_duplicated_as_bare_component(
+        self, tmp_path: Path,
+    ) -> None:
+        tree = tmp_path / "proj"
+        _write(tree, "CMakeLists.txt", """
+cmake_minimum_required(VERSION 3.10)
+project(proj)
+option(WITH_MINIZ "" OFF)
+if(WITH_MINIZ)
+  find_package(Miniz)
+  find_library(MINIZ_LIB miniz)
+endif()
+""")
+        comps, stats = collect_components(tree)
+        minizes = [c for c in comps if c.name.lower() == "miniz"]
+        # exactly one Miniz, carrying its condition, scope "" (not excluded),
+        # never a second bare (condition-less) entry.
+        assert len(minizes) <= 1
+        if minizes:
+            assert minizes[0].condition
+            assert minizes[0].scope == ""

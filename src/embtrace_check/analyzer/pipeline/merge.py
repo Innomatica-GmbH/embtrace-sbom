@@ -13,6 +13,9 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 from embtrace_check.analyzer.normalize import normalize_dep_name
 
 if TYPE_CHECKING:
@@ -42,6 +45,30 @@ def _is_tier5_noise(name: str) -> bool:
     return bool(_TIER5_NOISE.match(name))
 
 
+#: Build-script name-token ecosystems — the only place the skip list
+#: may drop a dependency (see check/collector.py for the measurement).
+_NAME_ONLY_ECOSYSTEMS = frozenset({
+    "cmake", "meson", "make", "autotools", "configure", "generic",
+})
+
+
+def _skip_checker() -> Callable[[str], bool] | None:
+    """The curated skip list, if the knowledge DB is importable.
+
+    The list (build tools, system libs — 950 curated names like
+    ``threads``, ``git``, ``appleframeworks``) was enforced only by
+    tier 4; tier 2's structured parsers emitted the same pseudo-deps
+    unfiltered into every report (measured: 60+ of the 212 missing
+    occurrences in embedded-coverage run #3 were skip-listed names).
+    Enforcing it here, in the merge, covers every tier once.
+    """
+    try:
+        from embtrace_check.sbom.knowledge_db import is_skipped
+    except ImportError:  # pragma: no cover - sbom extra not installed
+        return None
+    return is_skipped
+
+
 def merge_results(
     results: list[ScanResult],
 ) -> tuple[list[BuildFileDependency], list[BuildFileArtifact], list[BuildFileInternalDep]]:
@@ -60,6 +87,8 @@ def merge_results(
         Merged (dependencies, artifacts, internal_deps).
     """
     # --- Dependencies: deduplicate by normalized name, lowest tier wins ---
+    is_skipped = _skip_checker()
+
     # First pass: collect Tier 1-4 deps
     dep_best: dict[str, tuple[int, BuildFileDependency]] = {}
 
@@ -67,6 +96,12 @@ def merge_results(
         if result.tier >= 5:
             continue  # handle Tier 5 in second pass
         for dep in result.dependencies:
+            if (
+                is_skipped is not None
+                and getattr(dep, "ecosystem", "") in _NAME_ONLY_ECOSYSTEMS
+                and is_skipped(dep.name)
+            ):
+                continue
             key = normalize_dep_name(dep.name)
             existing = dep_best.get(key)
             if existing is None or result.tier < existing[0]:
@@ -78,6 +113,12 @@ def merge_results(
             continue
         for dep in result.dependencies:
             if _is_tier5_noise(dep.name):
+                continue
+            if (
+                is_skipped is not None
+                and getattr(dep, "ecosystem", "") in _NAME_ONLY_ECOSYSTEMS
+                and is_skipped(dep.name)
+            ):
                 continue
             key = normalize_dep_name(dep.name)
             if key not in dep_best:

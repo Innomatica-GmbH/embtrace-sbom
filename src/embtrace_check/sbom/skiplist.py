@@ -204,6 +204,7 @@ SKIP_NAMES: frozenset[str] = frozenset({
     "coreservices",
     "coretext",
     "corevideo",
+    "hubbub",  # netsurf HTML-parser system lib (find_library)
     "corewlan",
     "coverage",
     "cpm",
@@ -914,6 +915,7 @@ SKIP_NAMES: frozenset[str] = frozenset({
     "version",
     "versions",
     "videotoolbox",
+    "v4l2",  # video4linux2 system lib (find_library NAMES v4l2)
     "vivante",
     "vld",
     "vperfetto_min",

@@ -164,7 +164,7 @@ def collect_components(
         conditional_comps.append(CheckComponent(
             name=name, version=version, ecosystem=ecosystem,
             source_type="conditional", tier=tier, confidence=0.0,
-            condition=condition, scope="excluded",
+            condition=condition, scope="",
         ))
 
     for dep in scan_directory_recursive(path, max_depth=max_depth):
@@ -259,6 +259,11 @@ def collect_components(
         if _not_component(pdep.name):
             continue  # ${ARGN} or self-dependency (Befund 47)
         if normalize_dep_name(pdep.name) in seen_names:
+            continue
+        # Already carried as a conditional alternative (path 1 scan_cmake):
+        # the pipeline finding the same name again must not add a second,
+        # bare component (Befund 78 — the duplicate the suite never emits).
+        if normalize_dep_name(pdep.name) in conditional_seen:
             continue
         if pdep.ecosystem in _NAME_ONLY_ECOSYSTEMS and is_skipped(pdep.name):
             continue
