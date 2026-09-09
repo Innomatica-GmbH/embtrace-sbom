@@ -52,19 +52,24 @@ def test_upload_happy_path_uses_reference(
     runner = CliRunner()
     result = runner.invoke(
         check_cli.main,
-        [str(demo_project), "--voucher", "TEST-1", "--email", "cto@example.com"],
+        # 0.8.4: sending is explicit (--send); --yes skips the confirmation.
+        [str(demo_project), "--send", "--yes",
+         "--voucher", "TEST-1", "--email", "cto@example.com"],
     )
     assert result.exit_code == 0, result.stderr
     assert "CHK-TEST-1" in result.stderr
 
 
-def test_upload_requires_code_and_voucher_needs_email(demo_project: Path) -> None:
+def test_default_transmits_nothing_and_send_needs_email(demo_project: Path) -> None:
+    """0.8.4 (Ivan 09.09.): the default run writes the SBOM and sends NOTHING —
+    no code is required any more. Only --send transmits, and it needs an
+    address so the report can arrive."""
     runner = CliRunner()
     result = runner.invoke(check_cli.main, [str(demo_project)])
-    assert result.exit_code == 1
-    assert "embtrace.dev/check" in result.stderr
+    assert result.exit_code == 0
+    assert "Nothing was transmitted" in result.stderr
 
-    result = runner.invoke(check_cli.main, [str(demo_project), "--voucher", "X"])
+    result = runner.invoke(check_cli.main, [str(demo_project), "--send"])
     assert result.exit_code == 1
     assert "--email" in result.stderr
 
@@ -81,7 +86,10 @@ def test_code_uploads_without_email(
 
     monkeypatch.setattr(check_cli, "upload_payload", fake_upload)
     runner = CliRunner()
-    result = runner.invoke(check_cli.main, [str(demo_project), "--code", "CHK-ACME-7F3A"])
+    result = runner.invoke(
+        check_cli.main,
+        [str(demo_project), "--send", "--yes", "--code", "CHK-ACME-7F3A"],
+    )
     assert result.exit_code == 0, result.stderr
     assert captured["voucher"] == "CHK-ACME-7F3A"
     assert captured["email"] == ""
@@ -93,7 +101,8 @@ def test_code_and_voucher_together_rejected(demo_project: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         check_cli.main,
-        [str(demo_project), "--code", "CHK-A-1111", "--voucher", "X", "--email", "a@b.de"],
+        [str(demo_project), "--send", "--yes",
+         "--code", "CHK-A-1111", "--voucher", "X", "--email", "a@b.de"],
     )
     assert result.exit_code == 1
     assert "not both" in result.stderr
@@ -117,7 +126,8 @@ def test_upload_error_maps_to_exit_1(
     runner = CliRunner()
     result = runner.invoke(
         check_cli.main,
-        [str(demo_project), "--voucher", "TEST-1", "--email", "cto@example.com"],
+        [str(demo_project), "--send", "--yes",
+         "--voucher", "TEST-1", "--email", "cto@example.com"],
     )
     assert result.exit_code == 1
     assert "endpoint down" in result.stderr

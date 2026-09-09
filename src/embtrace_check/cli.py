@@ -1,10 +1,11 @@
 """CLI entry point for embtrace-check (standalone CRA Readiness Check collector).
 
 Usage:
-    embtrace-check . --code CHK-ACME-7F3A     # one-time code from embtrace.dev/check
-    embtrace-check . --dry-run                # show exactly what would be sent
+    embtrace-check .                          # read the build, write your SBOM — sends NOTHING
+    embtrace-check . --send --email you@example.com   # free CRA report (asks first)
+    embtrace-check . --sbom bill.json         # write the SBOM somewhere else
+    embtrace-check . --dry-run                # show exactly what a send would contain
     embtrace-check . --output payload.json    # offline / firewall fallback
-    embtrace-check . --voucher STOIL-2026 --email cto@example.com   # partner voucher
 
 Exit codes: 0 = success, 1 = error, 2 = no components found.
 """
@@ -20,7 +21,8 @@ from rich.console import Console
 from embtrace_check import __version__
 from embtrace_check.collector import collect_components
 from embtrace_check.core.exceptions import EmbtraceError
-from embtrace_check.payload import build_payload
+from embtrace_check.payload import CheckPayload, build_payload
+from embtrace_check.sbom_out import write_cyclonedx
 from embtrace_check.upload import DEFAULT_SUBMIT_URL, serialize_payload, upload_payload
 
 _PRIVACY_URL = "https://embtrace.dev/check-privacy"
@@ -37,12 +39,36 @@ _stdout = Console(soft_wrap=True)
     default=".",
 )
 @click.option(
+    "--send",
+    is_flag=True,
+    help="Send the bill of materials to embtrace for a free CRA readiness "
+    "report (needs --email; asks for confirmation first, shows exactly what "
+    "leaves the house). Without this flag NOTHING is transmitted. "
+    "Privacy: https://embtrace.dev/check-privacy",
+)
+@click.option(
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    help="Skip the confirmation question (for scripts/CI). Only meaningful "
+    "together with --send.",
+)
+@click.option(
+    "--sbom",
+    "sbom_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Where to write the CycloneDX SBOM (default: ./sbom.cdx.json). An "
+    "existing file is never silently overwritten.",
+)
+@click.option(
     "--code",
     default="",
-    help="Personal one-time code from https://embtrace.dev/check (report goes "
-    "to the address you registered there).",
+    help="Personal one-time code from https://embtrace.dev/check (optional; "
+    "the report goes to the address you registered there).",
 )
-@click.option("--voucher", default="", help="Partner voucher / campaign code.")
+@click.option("--voucher", default="",
+              help="Optional partner / campaign code (tracking only).")
 @click.option(
     "--lang", type=click.Choice(["de", "en"]), default=None,
     help="Report language. Default: the language of the landing page "
@@ -91,6 +117,9 @@ _stdout = Console(soft_wrap=True)
 )
 def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
     path: Path,
+    send: bool,
+    assume_yes: bool,
+    sbom_path: Path | None,
     code: str,
     voucher: str,
     lang: str | None,
@@ -102,17 +131,23 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
     no_declared_metadata: bool,
     url: str,
 ) -> None:
-    """Collect dependency metadata for the embtrace CRA Readiness Check.
+    """Read your build and write your bill of materials — locally.
 
-    Scans PATH (default: current directory) for lockfiles and build files,
-    then uploads component names/versions of discovered components — plus
-    the supplier/license/purl/cpe you declared yourself in
-    embtrace-deps.yaml (disable with --no-declared-metadata). Never code,
-    never file paths. Privacy notice: https://embtrace.dev/check-privacy
+    Scans PATH (default: current directory) for lockfiles and build files —
+    including CONFIGURED builds (CMakeCache.txt) and Yocto/Buildroot build
+    output — and writes a CycloneDX SBOM next to you. The default run
+    TRANSMITS NOTHING.
+
+    To get a free CRA readiness report, send the bill explicitly with --send
+    (you are shown exactly what would leave the house and asked first).
+    Never code, never file paths. Privacy: https://embtrace.dev/check-privacy
     """
     try:
         _run(
             path=path,
+            send=send,
+            assume_yes=assume_yes,
+            sbom_path=sbom_path,
             code=code,
             voucher=voucher,
             lang=lang,
@@ -129,9 +164,49 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
         sys.exit(exc.exit_code)
 
 
+def _asks_interactively(assume_yes: bool) -> bool:
+    """Only ask when a human is actually there (order: in CI never ask)."""
+    if assume_yes:
+        return False
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _print_send_invitation(written: Path) -> None:
+    """What the customer has, and how to get the report — no pressure."""
+    console.print(
+        f"\n[bold]Nothing was transmitted.[/bold] Your bill of materials is "
+        f"yours: {written}\n"
+        f"Free CRA readiness report: send it with "
+        f"[bold]embtrace-check --send --email you@example.com[/bold] "
+        f"(or e-mail {written.name} to support@innomatica.de) — "
+        f"report within 24 hours.\n"
+        f"[dim]Privacy: {_PRIVACY_URL}[/dim]"
+    )
+
+
+def _print_leaving_summary(payload: CheckPayload) -> None:
+    """Exactly what would leave the house: names + versions, no paths."""
+    comps = payload.components
+    console.print(
+        f"\n[bold]This would be sent[/bold] ({len(comps)} entries — names and "
+        f"versions only, no code, no file paths):"
+    )
+    for c in comps[:15]:
+        console.print(f"  {c.name} {c.version or '(no version)'}")
+    if len(comps) > 15:
+        console.print(f"  … and {len(comps) - 15} more")
+    console.print(
+        f"  [dim]plus: project label '{payload.project_label}', tool version, "
+        f"contact address '{payload.contact_email or '(from your code)'}'[/dim]"
+    )
+
+
 def _run(  # noqa: PLR0913 — mirrors the CLI surface
     *,
     path: Path,
+    send: bool = False,
+    assume_yes: bool = False,
+    sbom_path: Path | None = None,
     code: str,
     voucher: str,
     lang: str | None = None,
@@ -143,27 +218,36 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
     no_declared_metadata: bool = False,
     url: str,
 ) -> None:
-    """Execute collect → assemble → (print | write | upload)."""
-    uploading = not dry_run and output is None
-    if uploading:
-        if code and voucher:
-            console.print("[red]Error:[/red] use either --code or --voucher, not both.")
-            sys.exit(1)
-        if code:
-            # Personal one-time token: the server knows the registered address.
-            voucher = code
-        elif not voucher:
-            console.print(
-                "[red]Error:[/red] a code is required for upload. Get your free "
-                "one-time code at https://embtrace.dev/check"
-            )
-            sys.exit(1)
-        elif "@" not in contact_email:
-            console.print("[red]Error:[/red] --email must be a valid address (report delivery).")
-            sys.exit(1)
-        if code and contact_email and "@" not in contact_email:
-            console.print("[red]Error:[/red] --email must be a valid address (report delivery).")
-            sys.exit(1)
+    """Execute collect → write the SBOM → show → (offer to send).
+
+    Order collector-transparent-machen (Ivan, 09.09.2026): the DEFAULT run
+    generates, shows and SAVES — it transmits nothing. Sending is an explicit
+    decision: --send, or answering the question after the summary. A code is
+    no longer required (Ivan, 09.09.): only an e-mail address, so the report
+    can reach the customer; --voucher stays optional for partner tracking.
+    """
+    # Uploading now happens ONLY on an explicit request. --dry-run and
+    # --output keep their meaning (inspect / offline hand-off).
+    uploading = send and not dry_run and output is None
+    if uploading and code and voucher:
+        console.print("[red]Error:[/red] use either --code or --voucher, not both.")
+        sys.exit(1)
+    if uploading and code:
+        # Personal one-time token: the server knows the registered address.
+        voucher = code
+    if uploading and contact_email and "@" not in contact_email:
+        console.print("[red]Error:[/red] --email must be a valid address (report delivery).")
+        sys.exit(1)
+    # --send is a promise to transmit: check its precondition BEFORE scanning,
+    # so the customer is not told "error" only after the work is done. With a
+    # personal --code the server knows the address, so that path needs none.
+    if uploading and not code and "@" not in (contact_email or ""):
+        console.print(
+            "[red]Error:[/red] --send needs --email (the address your report "
+            "is sent to). Example: embtrace-check . --send --email "
+            "you@example.com"
+        )
+        sys.exit(1)
 
     console.print(f"[bold]embtrace-check[/bold] {__version__} — scanning {path.resolve().name}/")
     components, stats = collect_components(
@@ -293,10 +377,63 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         )
         return
 
+    # --- The default: the customer's own result, written locally ----------
+    # Generate → show → save. Nothing is transmitted here (order
+    # collector-transparent-machen). An existing SBOM is never silently
+    # overwritten — an earlier bill is evidence.
+    # The bill belongs to the project that was scanned, not to whatever
+    # directory the tool was invoked from (`embtrace-check /path/to/proj`
+    # must leave the SBOM in /path/to/proj). --sbom overrides explicitly.
+    written = write_cyclonedx(
+        sbom_path or (path / "sbom.cdx.json"),
+        components,
+        stats,
+        project_name=path.resolve().name,
+    )
+    console.print(f"[green]Your SBOM is in {written}[/green] (CycloneDX 1.6).")
+    if sbom_path is None and written.name != "sbom.cdx.json":
+        console.print(
+            "[dim]An existing sbom.cdx.json was kept — the new bill went to "
+            "the name above.[/dim]"
+        )
+
+    if not send and not _asks_interactively(assume_yes):
+        # Non-interactive (CI, pipe) and no --send: just the invitation.
+        _print_send_invitation(written)
+        return
+
+    if not send:
+        # Interactive default run: one direct question, default NO.
+        console.print(
+            "\nSend it to embtrace now for the free CRA readiness report? "
+            f"[dim](privacy: {_PRIVACY_URL})[/dim]"
+        )
+        if not click.confirm("Send now?", default=False):
+            _print_send_invitation(written)
+            return
+        if not contact_email:
+            contact_email = click.prompt(
+                "E-mail address for the report", default="", show_default=False,
+            ).strip()
+        if "@" not in contact_email:
+            console.print(
+                "[yellow]No valid address — nothing was sent.[/yellow]"
+            )
+            _print_send_invitation(written)
+            return
+        payload = payload.model_copy(update={"contact_email": contact_email})
+
+    # --- The send path: show what leaves the house, then ask -------------
+    if not assume_yes:
+        _print_leaving_summary(payload)
+        if not click.confirm("Send this to embtrace?", default=True):
+            console.print("[yellow]Nothing was sent.[/yellow]")
+            _print_send_invitation(written)
+            return
     reference = upload_payload(payload, url=url)
     destination = contact_email or "your registered address"
     console.print(
-        f"[green]Uploaded.[/green] Reference: [bold]{reference}[/bold] — "
+        f"[green]Sent.[/green] Reference: [bold]{reference}[/bold] — "
         f"your CRA readiness report will be sent to {destination} within 24 hours."
     )
 

@@ -1,17 +1,22 @@
 # embtrace-check
 
-**Free CRA Readiness Check collector** — one command in your project folder,
-and within 24 hours you receive a report showing where your product stands
-with the [EU Cyber Resilience Act](https://embtrace.dev/en/cra-nis2-guide.html):
-traffic-light readiness status, your full component inventory, and known
-vulnerabilities with severity.
+**Reads your build, writes your bill of materials — locally.** One command in
+your project folder produces a CycloneDX SBOM, including from **configured
+builds** (`CMakeCache.txt`) and **Yocto/Buildroot build output** that generic
+scanners cannot read. **The default run transmits nothing.**
+
+If you want the free CRA readiness report on top — traffic-light status against
+the [EU Cyber Resilience Act](https://embtrace.dev/en/cra-nis2-guide.html),
+your component inventory, known vulnerabilities with severity — send the bill
+explicitly. You are shown exactly what would leave the house, and asked first.
 
 This collector is **open source for one reason: so you can verify exactly
 what leaves your machine.**
 
-## What it transmits — and what it never does
+## What a send contains — and what it never does
 
-Transmitted (JSON, ~a few kB):
+The default run sends nothing at all. **If** you send (`--send`, or by
+answering the question), this travels (JSON, ~a few kB):
 
 - names, versions and package ecosystems of your dependencies
   (from lockfiles and build files: Conan, vcpkg, CMake, Cargo, npm/yarn/pnpm,
@@ -62,28 +67,38 @@ you exactly what it looks for and where.
 
 ## Usage
 
-1. Get your free one-time code at **<https://embtrace.dev/check>**
-   (the report goes to the e-mail address you register there).
-2. Run the collector in your project folder:
-
 ```bash
 pipx install embtrace-check         # or: pip install embtrace-check,
                                     #     or download the standalone binary
-embtrace-check . --code CHK-XXXX-YYYY
+embtrace-check .                    # reads your build, writes sbom.cdx.json
+                                    # — and transmits NOTHING
 ```
 
-3. Your report arrives within 24 hours. The code is valid for one check.
+You now have your own CycloneDX SBOM. An existing `sbom.cdx.json` is never
+silently overwritten.
 
-More options: `embtrace-check --help` — including `--output payload.json`
-for air-gapped environments (send the file by mail) and `--with-tools` to
-additionally use native package-manager CLIs for higher-fidelity results.
+**Free CRA readiness report** (optional): send the bill explicitly —
+
+```bash
+embtrace-check . --send --email you@example.com
+```
+
+You are shown exactly what would leave the house (names and versions, no
+paths, no code) and asked to confirm; `--yes` skips the question in scripts.
+No code is required. The report arrives within 24 hours. You can also simply
+e-mail your `sbom.cdx.json` to support@innomatica.de.
+
+More options: `embtrace-check --help` — including `--sbom PATH` (write the
+SBOM elsewhere), `--output payload.json` for air-gapped environments (send the
+file by mail) and `--with-tools` to additionally use native package-manager
+CLIs for higher-fidelity results.
 
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0    | success |
-| 1    | error (network, invalid code, …) |
+| 1    | error (network, missing --email with --send, …) |
 | 2    | no components found — declare dependencies manually in `embtrace-deps.yaml` |
 
 ## Privacy
