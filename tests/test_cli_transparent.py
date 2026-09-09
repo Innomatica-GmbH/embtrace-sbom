@@ -149,3 +149,28 @@ class TestExistingSbomNotOverwritten:
         assert res.exit_code == 0, res.output
         assert target.is_file()
         assert json.loads(target.read_text(encoding="utf-8"))["bomFormat"] == "CycloneDX"
+
+
+class TestNoSend:
+    """no_send_never_asks (Ivan, 09.09.): for anyone who has decided they
+    will not send — never ask, never transmit, just write the SBOM."""
+
+    def test_no_send_never_asks_and_writes(self, tmp_path: Path) -> None:
+        proj = _project(tmp_path)
+        with patch("embtrace_check.cli.upload_payload") as up, \
+             patch("embtrace_check.cli._asks_interactively", return_value=True):
+            res = CliRunner().invoke(main, [str(proj), "--no-send"])
+        assert res.exit_code == 0, res.output
+        up.assert_not_called()
+        assert "Send now?" not in res.output       # even with a TTY present
+        assert (proj / "sbom.cdx.json").is_file()
+
+    def test_no_send_with_send_is_a_contradiction(self, tmp_path: Path) -> None:
+        proj = _project(tmp_path)
+        with patch("embtrace_check.cli.upload_payload") as up:
+            res = CliRunner().invoke(
+                main, [str(proj), "--no-send", "--send", "--email", "a@b.de"],
+            )
+        assert res.exit_code == 1
+        up.assert_not_called()
+        assert "contradict" in res.output

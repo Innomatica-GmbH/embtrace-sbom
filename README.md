@@ -86,7 +86,7 @@ embtrace-check . --send --email you@example.com
 You are shown exactly what would leave the house (names and versions, no
 paths, no code) and asked to confirm; `--yes` skips the question in scripts.
 No code is required. The report arrives within 24 hours. You can also simply
-e-mail your `sbom.cdx.json` to support@innomatica.de.
+e-mail your `sbom.cdx.json` to check@innomatica.de.
 
 More options: `embtrace-check --help` — including `--sbom PATH` (write the
 SBOM elsewhere), `--output payload.json` for air-gapped environments (send the

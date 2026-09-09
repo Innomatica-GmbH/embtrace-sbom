@@ -73,7 +73,7 @@ def upload_payload(payload: CheckPayload, *, url: str = DEFAULT_SUBMIT_URL) -> s
     except urllib.error.URLError as exc:
         msg = (
             f"Could not reach {url}: {exc.reason}. "
-            "Use --output payload.json and send the file to support@innomatica.de."
+            "Use --output payload.json and send the file to check@innomatica.de."
         )
         raise CheckUploadError(msg) from exc
 

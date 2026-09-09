@@ -47,6 +47,13 @@ _stdout = Console(soft_wrap=True)
     "Privacy: https://embtrace.dev/check-privacy",
 )
 @click.option(
+    "--no-send",
+    "never_send",
+    is_flag=True,
+    help="Never ask and never transmit: just read the build and write the "
+    "SBOM. For anyone who has decided they will not send.",
+)
+@click.option(
     "--yes",
     "assume_yes",
     is_flag=True,
@@ -118,6 +125,7 @@ _stdout = Console(soft_wrap=True)
 def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
     path: Path,
     send: bool,
+    never_send: bool,
     assume_yes: bool,
     sbom_path: Path | None,
     code: str,
@@ -146,6 +154,7 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
         _run(
             path=path,
             send=send,
+            never_send=never_send,
             assume_yes=assume_yes,
             sbom_path=sbom_path,
             code=code,
@@ -178,7 +187,7 @@ def _print_send_invitation(written: Path) -> None:
         f"yours: {written}\n"
         f"Free CRA readiness report: send it with "
         f"[bold]embtrace-check --send --email you@example.com[/bold] "
-        f"(or e-mail {written.name} to support@innomatica.de) — "
+        f"(or e-mail {written.name} to check@innomatica.de) — "
         f"report within 24 hours.\n"
         f"[dim]Privacy: {_PRIVACY_URL}[/dim]"
     )
@@ -205,6 +214,7 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
     *,
     path: Path,
     send: bool = False,
+    never_send: bool = False,
     assume_yes: bool = False,
     sbom_path: Path | None = None,
     code: str,
@@ -228,6 +238,11 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
     """
     # Uploading now happens ONLY on an explicit request. --dry-run and
     # --output keep their meaning (inspect / offline hand-off).
+    if never_send and send:
+        console.print(
+            "[red]Error:[/red] --no-send and --send contradict each other."
+        )
+        sys.exit(1)
     uploading = send and not dry_run and output is None
     if uploading and code and voucher:
         console.print("[red]Error:[/red] use either --code or --voucher, not both.")
@@ -373,7 +388,7 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         output.write_bytes(serialize_payload(payload))
         console.print(
             f"[green]Payload written to {output}.[/green] "
-            "Send it to support@innomatica.de to receive your report."
+            "Send it to check@innomatica.de to receive your report."
         )
         return
 
@@ -397,7 +412,7 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
             "the name above.[/dim]"
         )
 
-    if not send and not _asks_interactively(assume_yes):
+    if not send and (never_send or not _asks_interactively(assume_yes)):
         # Non-interactive (CI, pipe) and no --send: just the invitation.
         _print_send_invitation(written)
         return
