@@ -13,6 +13,39 @@ explicitly. You are shown exactly what would leave the house, and asked first.
 This collector is **open source for one reason: so you can verify exactly
 what leaves your machine.**
 
+## SBOM generation for embedded builds
+
+Most SBOM tools catalog package registries — npm, PyPI, Go, Cargo. Embedded software
+is built differently: CMake, Make, Meson and Autotools source trees, Yocto images,
+Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-check reads.
+
+**What you get:**
+
+- A CycloneDX 1.6 bill of materials from your **build**, not just from lockfiles —
+  including the C/C++ worlds that have no package manager. Versions of system
+  libraries come from the linked system (pkg-config), never guessed.
+- **License and supplier** filled in on the free report for the components we can
+  determine them for, from a curated knowledge base (50,000+ entries covering Yocto
+  and Buildroot packages). The local file carries what your build says; the
+  knowledge base is applied server-side.
+- Test material, examples and build tools **marked as excluded** instead of counted
+  as product components. Conditional dependencies are marked **optional** instead
+  of being guessed into the product.
+- **Nothing leaves your machine by default.** The standard run writes `sbom.cdx.json`
+  next to your project and transmits nothing. Sending it to embtrace for a free CRA
+  readiness report is a separate, explicit step — the tool shows you the full list
+  and asks before anything is transmitted.
+
+**Why not a generic scanner?** Measured on 2026-09-09 against syft 1.51.1 across six
+embedded projects (CMake, Zephyr, Yocto, Buildroot): the generic scanner produced
+zero product components for these builds. For registry ecosystems (npm, PyPI, Go),
+generic scanners work well — embedded builds are the gap this tool exists for.
+
+```
+pipx install embtrace-check
+embtrace-check .        # writes sbom.cdx.json, sends nothing
+```
+
 ## What a send contains — and what it never does
 
 The default run sends nothing at all. **If** you send (`--send`, or by
