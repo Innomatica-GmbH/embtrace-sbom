@@ -112,3 +112,92 @@ class TestEveryComponentCarriesAScope:
         assert scopes, doc
         assert all(scopes.values()), scopes
         assert "excluded" in scopes.values()
+
+
+class TestNoComponentLeavesWithoutAScope:
+    """Befund 81 Nachtrag (0.8.6) — die Invariante über ALLE Erkennungswege.
+
+    Mein 0.8.5-Test war grün und trotzdem falsch: sein Fixture traf nur den
+    Lockfile-Weg (OpenSSL über pkg-config aufgelöst). Am echten libwebsockets
+    blieben 15 von 30 Komponenten ohne Scope — 12 aus dem Regex-CMake-Weg
+    (Tier 4, nicht auflösbar), 3 bedingte hinter einer Bauoption. Beide Wege
+    entstehen in collector.py, nicht im Scanner, und beide schrieb ich mit
+    leerem Scope.
+
+    Dieses Fixture erzwingt alle drei Wege. "optional" ist die belegbare
+    Aussage: aus einer Baudatei gelesen, ohne aufgelösten Bau nicht
+    entscheidbar, ob es mitgeht — weder "required" noch "excluded" wären
+    belegt.
+    """
+
+    @staticmethod
+    def _three_paths(tmp_path: Path) -> Path:
+        p = tmp_path / "proj"
+        p.mkdir()
+        (p / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.10)\n"
+            "project(proj)\n"
+            "find_package(OpenSSL REQUIRED)\n"          # aufloesbar -> required
+            "find_package(Miniz)\n"                     # Regex, Tier 4 -> ?
+            "find_package(rav1e)\n"                     # Regex, Tier 4 -> ?
+            "option(WITH_ALSA \"alsa\" OFF)\n"
+            "if(WITH_ALSA)\n"
+            "  find_package(ALSA REQUIRED)\n"           # bedingt -> ?
+            "endif()\n",
+            encoding="utf-8",
+        )
+        tests = p / "tests"
+        tests.mkdir()
+        (tests / "requirements.txt").write_text("pytest==7.0.0\n", encoding="utf-8")
+        return p
+
+    def _components(self, tmp_path: Path) -> list:
+        proj = self._three_paths(tmp_path)
+        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+            res = CliRunner().invoke(
+                main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
+            )
+        assert res.exit_code == 0, res.output
+        return list(up.call_args[0][0].components)
+
+    def test_a_tier4_regex_hit_without_condition_becomes_optional(
+        self, tmp_path: Path,
+    ) -> None:
+        # Der Weg, den kein Fixture-Zufall trifft: run_pipeline liefert einen
+        # Regex-Fund (Tier 4) ohne Bedingung — an libwebsockets 12 Stueck
+        # (alsa, gstreamer, mbedtls, opus, sqlite3, wolfssl, …). Direkt
+        # injiziert statt ueber Parser-Heuristik, damit der Test genau den
+        # Code trifft, der in 0.8.5 den leeren Scope schrieb.
+        from types import SimpleNamespace
+        from embtrace_check.collector import collect_components
+        proj = self._three_paths(tmp_path)
+        fake = SimpleNamespace(
+            name="wolfssl", version="", ecosystem="cmake",
+            detection_method="regex-cmake", tier=4, confidence=0.7,
+            source_file="lib/tls/CMakeLists.txt", context="",
+        )
+        with patch("embtrace_check.collector.run_pipeline",
+                   return_value=([fake], [], [])):
+            comps, _stats = collect_components(proj)
+        by_name = {c.name.lower(): c for c in comps}
+        assert "wolfssl" in by_name, [c.name for c in comps]
+        assert by_name["wolfssl"].source_type == "regex-cmake"
+        assert by_name["wolfssl"].scope == "optional", by_name["wolfssl"]
+
+    def test_no_component_has_an_empty_scope(self, tmp_path: Path) -> None:
+        comps = self._components(tmp_path)
+        unstamped = [(c.name, c.source_type) for c in comps if not c.scope]
+        assert not unstamped, unstamped
+
+    def test_a_conditional_hit_is_optional_not_required(
+        self, tmp_path: Path,
+    ) -> None:
+        # ALSA steht hinter einer Bauoption, die standardmaessig aus ist:
+        # kein Beleg, dass es mitgeht -> keine Behauptung. (Miniz/rav1e
+        # laufen im Fixture ueber den Scanner-Weg und tragen dort die
+        # Suite-Regel "required" — an libwebsockets kommen sie ueber den
+        # Regex-Weg, den der Test oben direkt abdeckt.)
+        comps = self._components(tmp_path)
+        by_name = {c.name.lower(): c.scope for c in comps}
+        assert by_name.get("alsa") == "optional", by_name
+        assert by_name.get("pytest") == "excluded"

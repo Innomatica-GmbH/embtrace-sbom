@@ -164,7 +164,13 @@ def collect_components(
         conditional_comps.append(CheckComponent(
             name=name, version=version, ecosystem=ecosystem,
             source_type="conditional", tier=tier, confidence=0.0,
-            condition=condition, scope="",
+            # CycloneDX "optional" heisst genau das: kann im Produkt sein,
+            # muss aber nicht (Befund 81 Nachtrag). Der leere Scope war die
+            # Form der SUITE, wo der Kunde die Frage im Assistenten
+            # beantwortet — im Gratis-Check gibt es diesen Dialog nicht, also
+            # muss das Werkzeug selbst etwas Ehrliches sagen. "required" waere
+            # eine Behauptung ohne Beleg, "excluded" ebenso.
+            condition=condition, scope="optional",
         ))
 
     for dep in scan_directory_recursive(path, max_depth=max_depth):
@@ -300,7 +306,13 @@ def collect_components(
             source_type=pdep.detection_method or "build-file",
             tier=pdep.tier,
             confidence=pdep.confidence,
-            scope="excluded" if is_excluded else "",
+            # Kein leerer Scope mehr (Befund 81 Nachtrag): an libwebsockets
+            # gemessen blieben so 15 von 30 Komponenten ungestempelt, und der
+            # Bericht konnte Produkt und Testmaterial nicht trennen — genau
+            # die Aussage, für die der Gratis-Check da ist. "optional" ist
+            # hier die belegbare: aus einer Baudatei gelesen, ohne
+            # aufgeloesten Bau ist nicht entscheidbar, ob sie mitgeht.
+            scope="excluded" if is_excluded else "optional",
         )
 
     # Path 3: Yocto/Buildroot BUILD OUTPUT — what is actually in the

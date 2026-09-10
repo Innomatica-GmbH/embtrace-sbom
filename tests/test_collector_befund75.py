@@ -117,9 +117,12 @@ endif()
 """)
         comps, stats = collect_components(tree)
         minizes = [c for c in comps if c.name.lower() == "miniz"]
-        # exactly one Miniz, carrying its condition, scope "" (not excluded),
-        # never a second bare (condition-less) entry.
+        # exactly one Miniz, carrying its condition, NOT excluded, never a
+        # second bare (condition-less) entry. Since 0.8.6 (Befund 81
+        # Nachtrag) the undecidable scope is stated as CycloneDX "optional"
+        # instead of left empty — the intent of Befund 78 (not excluded, not
+        # duplicated) is unchanged.
         assert len(minizes) <= 1
         if minizes:
             assert minizes[0].condition
-            assert minizes[0].scope == ""
+            assert minizes[0].scope == "optional"
