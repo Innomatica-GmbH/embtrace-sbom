@@ -1,6 +1,6 @@
 [project]
 name = "embtrace-check"
-version = "0.8.4"
+version = "0.8.5"
 description = "CRA Readiness Check collector — scans your project's lockfiles and uploads dependency metadata only (never code, never paths). Open source so you can verify exactly what leaves your machine."
 readme = "README.md"
 license = { file = "LICENSE" }

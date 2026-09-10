@@ -1657,6 +1657,20 @@ def scan_directory_recursive(
             seen.add(key)
             unique.append(dep)
 
+    # Every component carries a scope (Befund 81, nachgezogen aus der Suite).
+    # Until now only test material was stamped ("excluded") and everything
+    # else stayed empty — so in the payload, and therefore in the CUSTOMER'S
+    # report, "part of the product" and "never judged" looked identical. The
+    # report could not separate product from test material, which is exactly
+    # the distinction the free check is supposed to deliver.
+    #
+    # "required" is the CONSERVATIVE default, not a measurement: a component
+    # found in the build tree and not recognised as test material is treated
+    # as part of the product — the claim the report already makes about it.
+    for dep in unique:
+        if not dep.scope:
+            dep.scope = "required"
+
     logger.info(
         "Recursive scan: %d unique dependencies in %s (depth=%d)",
         len(unique), path, max_depth,

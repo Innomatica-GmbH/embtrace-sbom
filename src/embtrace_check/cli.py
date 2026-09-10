@@ -367,7 +367,15 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
 
     payload = build_payload(
         lang=lang or "",
-        voucher=voucher or code or "DRY-RUN",
+        # No placeholder (Befund 93a): the field was filled with the literal
+        # "DRY-RUN" on EVERY payload — the old comment claimed it was "for
+        # dry-run/offline only", but a real --send carried it too. On the
+        # server that beat the honest classification, so a paying prospect
+        # was filed as CHK-…-DRY-RUN.json and reported as attribution
+        # "DRY-RUN" in the support mail that a human forwards by hand.
+        # An empty field is the truth: no code was given. The server files
+        # it as "no-code".
+        voucher=voucher or code or "",
         # With a personal --code the address stays empty — the server fills it
         # from the registration; the placeholder is for dry-run/offline only.
         contact_email=contact_email or ("" if code else "dry-run@localhost"),
