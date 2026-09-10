@@ -169,6 +169,7 @@ class TestNoComponentLeavesWithoutAScope:
         # injiziert statt ueber Parser-Heuristik, damit der Test genau den
         # Code trifft, der in 0.8.5 den leeren Scope schrieb.
         from types import SimpleNamespace
+
         from embtrace_check.collector import collect_components
         proj = self._three_paths(tmp_path)
         fake = SimpleNamespace(
