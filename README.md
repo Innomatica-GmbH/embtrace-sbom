@@ -20,9 +20,9 @@ Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-check reads.
   including the C/C++ worlds that have no package manager. Versions of system
   libraries come from the linked system (pkg-config), never guessed.
 - **License and supplier** filled in on the free report for the components we can
-  determine them for, from a curated knowledge base (50,000+ entries covering Yocto
-  and Buildroot packages). The local file carries what your build says; the
-  knowledge base is applied server-side.
+  determine them for, from a curated knowledge base — 50,000+ entries spanning both
+  worlds, from npm and Cargo to Yocto, Buildroot and CMake. The local file carries
+  what your build says; the knowledge base is applied server-side.
 - Test material, examples and build tools **marked as excluded** instead of counted
   as product components. Conditional dependencies are marked **optional** instead
   of being guessed into the product.
