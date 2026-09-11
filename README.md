@@ -80,8 +80,7 @@ and what it never does — is spelled out [further down](#what-a-send-contains--
 
 ## What a send contains — and what it never does
 
-**If** you send (`--send`, or by answering the question), this travels
-(JSON, ~a few kB):
+**If** you send (`--send`), this travels (JSON, ~a few kB):
 
 - names, versions and package ecosystems of your dependencies
   (from lockfiles and build files: Conan, vcpkg, CMake, Cargo, npm/yarn/pnpm,

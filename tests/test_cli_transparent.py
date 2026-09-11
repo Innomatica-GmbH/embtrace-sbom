@@ -127,19 +127,19 @@ class TestSendConfirmsBeforePost:
 
 
 class TestExistingSbomNotOverwritten:
-    """existing_sbom_not_overwritten: an earlier bill is evidence."""
+    """A FOREIGN file of that name is evidence and is never touched (0.9.1:
+    the run stops with a --sbom hint instead of numbering a copy beside it)."""
 
-    def test_second_run_keeps_the_first_file(self, tmp_path: Path) -> None:
+    def test_foreign_file_is_left_alone(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
         existing = proj / "sbom.cdx.json"
         existing.write_text('{"mine": true}', encoding="utf-8")
         res = CliRunner().invoke(main, [str(proj)])
-        assert res.exit_code == 0, res.output
-        # untouched
+        assert res.exit_code == 1, res.output
+        # untouched, and no numbered copy beside it
         assert json.loads(existing.read_text(encoding="utf-8")) == {"mine": True}
-        # and the new one went beside it
-        assert (proj / "sbom.cdx-2.json").is_file()
-        assert "was kept" in res.output
+        assert not (proj / "sbom.cdx-2.json").exists()
+        assert "--sbom" in res.output
 
     def test_explicit_sbom_path_is_honoured(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
@@ -158,7 +158,8 @@ class TestNoSend:
     def test_no_send_never_asks_and_writes(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
         with patch("embtrace_sbom.cli.upload_payload") as up, \
-             patch("embtrace_sbom.cli._asks_interactively", return_value=True):
+             patch("sys.stdin.isatty", return_value=True), \
+             patch("sys.stdout.isatty", return_value=True):
             res = CliRunner().invoke(main, [str(proj), "--no-send"])
         assert res.exit_code == 0, res.output
         up.assert_not_called()

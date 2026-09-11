@@ -22,7 +22,7 @@ from embtrace_sbom import __version__
 from embtrace_sbom.collector import collect_components
 from embtrace_sbom.core.exceptions import EmbtraceError
 from embtrace_sbom.payload import CheckPayload, build_payload
-from embtrace_sbom.sbom_out import write_cyclonedx
+from embtrace_sbom.sbom_out import classify_existing, write_cyclonedx
 from embtrace_sbom.upload import DEFAULT_SUBMIT_URL, serialize_payload, upload_payload
 
 _PRIVACY_URL = "https://embtrace.dev/check-privacy"
@@ -173,23 +173,18 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
         sys.exit(exc.exit_code)
 
 
-def _asks_interactively(assume_yes: bool) -> bool:
-    """Only ask when a human is actually there (order: in CI never ask)."""
-    if assume_yes:
-        return False
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
-def _print_send_invitation(written: Path) -> None:
-    """What the customer has, and how to get the report — no pressure."""
+def _print_default_ending(
+    written: Path, n_components: int, path_arg: str, *, updated: bool,
+) -> None:
+    """The end of the default run — output text, never a question (Ivan,
+    11.09.2026: "defaultmäßig nicht fragen, sondern als Output-Text")."""
+    noun = "component" if n_components == 1 else "components"
+    note = " — previous run replaced" if updated else ""
+    console.print(f"Wrote {written.name} ({n_components} {noun}){note}.")
+    console.print("Nothing was transmitted.")
     console.print(
-        f"\n[bold]Nothing was transmitted.[/bold] Your bill of materials is "
-        f"yours: {written}\n"
-        f"Free CRA readiness report: send it with "
-        f"[bold]embtrace-sbom --send --email you@example.com[/bold] "
-        f"(or e-mail {written.name} to check@innomatica.de) — "
-        f"report within 24 hours.\n"
-        f"[dim]Privacy: {_PRIVACY_URL}[/dim]"
+        f"Free CRA readiness report: embtrace-sbom {path_arg} --send "
+        f"--email you@example.com"
     )
 
 
@@ -407,51 +402,29 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
     # The bill belongs to the project that was scanned, not to whatever
     # directory the tool was invoked from (`embtrace-sbom /path/to/proj`
     # must leave the SBOM in /path/to/proj). --sbom overrides explicitly.
+    target = sbom_path or (path / "sbom.cdx.json")
+    updated = classify_existing(target) == "own"
     written = write_cyclonedx(
-        sbom_path or (path / "sbom.cdx.json"),
+        target,
         components,
         stats,
         project_name=path.resolve().name,
     )
-    console.print(f"[green]Your SBOM is in {written}[/green] (CycloneDX 1.6).")
-    if sbom_path is None and written.name != "sbom.cdx.json":
-        console.print(
-            "[dim]An existing sbom.cdx.json was kept — the new bill went to "
-            "the name above.[/dim]"
-        )
-
-    if not send and (never_send or not _asks_interactively(assume_yes)):
-        # Non-interactive (CI, pipe) and no --send: just the invitation.
-        _print_send_invitation(written)
-        return
+    path_arg = "." if path.resolve() == Path.cwd().resolve() else str(path)
 
     if not send:
-        # Interactive default run: one direct question, default NO.
-        console.print(
-            "\nSend it to embtrace now for the free CRA readiness report? "
-            f"[dim](privacy: {_PRIVACY_URL})[/dim]"
-        )
-        if not click.confirm("Send now?", default=False):
-            _print_send_invitation(written)
-            return
-        if not contact_email:
-            contact_email = click.prompt(
-                "E-mail address for the report", default="", show_default=False,
-            ).strip()
-        if "@" not in contact_email:
-            console.print(
-                "[yellow]No valid address — nothing was sent.[/yellow]"
-            )
-            _print_send_invitation(written)
-            return
-        payload = payload.model_copy(update={"contact_email": contact_email})
+        # The default run ends in text, TTY or not — no question. Sending
+        # is a decision the customer makes with --send.
+        _print_default_ending(written, len(components), path_arg, updated=updated)
+        return
 
     # --- The send path: show what leaves the house, then ask -------------
     if not assume_yes:
         _print_leaving_summary(payload)
+        console.print(f"[dim]Privacy: {_PRIVACY_URL}[/dim]")
         if not click.confirm("Send this to embtrace?", default=True):
             console.print("[yellow]Nothing was sent.[/yellow]")
-            _print_send_invitation(written)
+            _print_default_ending(written, len(components), path_arg, updated=updated)
             return
     reference = upload_payload(payload, url=url)
     destination = contact_email or "your registered address"

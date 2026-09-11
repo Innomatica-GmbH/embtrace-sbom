@@ -13,19 +13,8 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install build && python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
-  pypi-shim:
-    # The old name gets one last release: a thin forwarding shell that
-    # depends on embtrace-sbom — printed instructions keep working.
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions: { id-token: write }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install build && python -m build shim/embtrace-check --outdir shim-dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with: { packages-dir: shim-dist }
+  # The forwarding shell embtrace-check 0.9.0 was published once (its last
+  # release); PyPI refuses re-uploads, so that job is gone.
   binary:
     runs-on: ubuntu-22.04   # aeltere glibc = laeuft auf mehr Zielsystemen
     permissions: { contents: write }

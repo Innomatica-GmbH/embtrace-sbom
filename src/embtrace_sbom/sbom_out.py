@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from embtrace_sbom import __version__
+from embtrace_sbom.core.exceptions import EmbtraceError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -104,6 +105,29 @@ def build_cyclonedx(
     }
 
 
+#: Names this tool has signed its own output with (metadata.tools).
+OWN_TOOL_NAMES = frozenset({"embtrace-sbom", "embtrace-check"})
+
+
+def classify_existing(path: Path) -> str:
+    """What is at *path*: ``"none"``, ``"own"`` (written by this tool — the
+    ``metadata.tools`` stamp says so) or ``"foreign"`` (anything else)."""
+    if not path.exists():
+        return "none"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        tools = doc.get("metadata", {}).get("tools")
+    except (OSError, ValueError, AttributeError):
+        return "foreign"
+    entries: list[object] = []
+    if isinstance(tools, dict):                     # CycloneDX 1.5+ form
+        entries = list(tools.get("components") or [])
+    elif isinstance(tools, list):                   # legacy form
+        entries = tools
+    names = {str(e.get("name", "")) for e in entries if isinstance(e, dict)}
+    return "own" if names & OWN_TOOL_NAMES else "foreign"
+
+
 def write_cyclonedx(
     path: Path,
     components: list[CheckComponent],
@@ -111,25 +135,26 @@ def write_cyclonedx(
     *,
     project_name: str,
 ) -> Path:
-    """Write the SBOM to *path*, never silently overwriting.
+    """Write the SBOM to *path*.
 
-    An existing file is kept: the new document goes to ``<stem>-<n><suffix>``
-    (order collector-transparent-machen: "eine vorhandene Datei nie stumm
-    überschreiben" — a customer's earlier bill is evidence, not scratch).
+    This tool's own earlier output at *path* is UPDATED (the stamp in
+    ``metadata.tools`` identifies it) — a second run refreshes the bill
+    instead of leaving ``sbom.cdx-2.json`` behind (Ivan, 11.09.2026: a
+    wandering file name is a graveyard and breaks CI). A file that was not
+    written by this tool is never touched: that is someone's evidence, and
+    the caller must choose another name (``--sbom``).
 
-    Returns the path actually written.
+    Returns the path written.
     """
-    target = path
-    if target.exists():
-        n = 2
-        while True:
-            candidate = target.with_name(f"{path.stem}-{n}{path.suffix}")
-            if not candidate.exists():
-                target = candidate
-                break
-            n += 1
+    kind = classify_existing(path)
+    if kind == "foreign":
+        raise EmbtraceError(
+            f"{path} exists and was not written by embtrace-sbom — it is left "
+            f"untouched. Write the bill elsewhere with --sbom PATH.",
+            exit_code=1,
+        )
     doc = build_cyclonedx(components, stats, project_name=project_name)
-    target.write_text(
+    path.write_text(
         json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
     )
-    return target
+    return path
