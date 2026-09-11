@@ -50,6 +50,7 @@ packages = ["src/embtrace_sbom"]
 
 [tool.hatch.build.targets.sdist]
 exclude = ["placeholder/", "shim/"]
+include = ["src/", "tests/", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
 
 [tool.ruff]
 target-version = "py311"

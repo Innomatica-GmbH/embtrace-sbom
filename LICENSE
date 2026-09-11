@@ -1,16 +1,3 @@
-embtrace-sbom — SBOM generation for embedded builds
-Copyright (C) 2026 Innomatica GmbH, Ostfildern, Germany
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version. It is distributed WITHOUT ANY WARRANTY; see the license text below.
-
-Releases up to and including embtrace-check 0.8.6 were published under the MIT
-License and remain available under it.
-
------------------------------------------------------------------------
-
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
