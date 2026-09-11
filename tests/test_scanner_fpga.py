@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from embtrace_check.sbom.scanner import scan_directory, scan_vivado_hwh, scan_vivado_xci
+from embtrace_sbom.sbom.scanner import scan_directory, scan_vivado_hwh, scan_vivado_xci
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -150,7 +150,7 @@ set_module_property DISPLAY_NAME axi_dmac
 def test_libero_wildcard_version_reported_empty_never_guessed(tmp_path: Path) -> None:
     """Libero pins no version ('*') — honest empty version + note, per BSI
     the audit must be able to flag it; guessing the catalog version is wrong."""
-    from embtrace_check.sbom.scanner import scan_fpga_tcl
+    from embtrace_sbom.sbom.scanner import scan_fpga_tcl
 
     f = tmp_path / "COREI2C_C0.tcl"
     f.write_text(LIBERO_TCL, encoding="utf-8")
@@ -166,7 +166,7 @@ def test_libero_wildcard_version_reported_empty_never_guessed(tmp_path: Path) ->
 
 
 def test_quartus_hw_tcl_module_properties(tmp_path: Path) -> None:
-    from embtrace_check.sbom.scanner import scan_fpga_tcl
+    from embtrace_sbom.sbom.scanner import scan_fpga_tcl
 
     f = tmp_path / "axi_dmac_hw.tcl"
     f.write_text(QUARTUS_HW_TCL, encoding="utf-8")
@@ -180,7 +180,7 @@ def test_quartus_hw_tcl_module_properties(tmp_path: Path) -> None:
 
 
 def test_plain_tcl_without_ip_markers_yields_nothing(tmp_path: Path) -> None:
-    from embtrace_check.sbom.scanner import scan_fpga_tcl
+    from embtrace_sbom.sbom.scanner import scan_fpga_tcl
 
     f = tmp_path / "build.tcl"
     f.write_text("puts hello\nsource other.tcl\n", encoding="utf-8")
@@ -215,7 +215,7 @@ CXF_FIRST_PARTY_SMARTDESIGN = (
 
 
 def test_cxf_resolves_generated_core_version(tmp_path: Path) -> None:
-    from embtrace_check.sbom.scanner import scan_libero_cxf
+    from embtrace_sbom.sbom.scanner import scan_libero_cxf
 
     f = tmp_path / "CORERESET_PF.cxf"
     f.write_text(CXF_THIRD_PARTY, encoding="utf-8")
@@ -229,7 +229,7 @@ def test_cxf_resolves_generated_core_version(tmp_path: Path) -> None:
 def test_cxf_skips_first_party_smartdesign(tmp_path: Path) -> None:
     """Own SmartDesigns carry EMPTY vendor/library/version first (measured) —
     they are the user's code, not supplied IP."""
-    from embtrace_check.sbom.scanner import scan_libero_cxf
+    from embtrace_sbom.sbom.scanner import scan_libero_cxf
 
     f = tmp_path / "sp.cxf"
     f.write_text(CXF_FIRST_PARTY_SMARTDESIGN, encoding="utf-8")

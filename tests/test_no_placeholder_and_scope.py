@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from embtrace_check.cli import main
-from embtrace_check.sbom.scanner import scan_directory_recursive
+from embtrace_sbom.cli import main
+from embtrace_sbom.sbom.scanner import scan_directory_recursive
 
 
 def _project(tmp_path: Path) -> Path:
@@ -41,7 +41,7 @@ class TestNoPlaceholderVoucher:
 
     def test_a_real_send_carries_no_placeholder(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="R") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
             )
@@ -52,7 +52,7 @@ class TestNoPlaceholderVoucher:
 
     def test_a_real_voucher_still_travels(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="R") as up:
             res = CliRunner().invoke(main, [
                 str(proj), "--send", "--yes", "--email", "a@b.de",
                 "--voucher", "STOIL-2026",
@@ -88,7 +88,7 @@ class TestEveryComponentCarriesAScope:
         # Abnahme des Auftrags: das Testmaterial ist in der Einsendung
         # ausgewiesen, damit der Bericht es trennen kann.
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="R") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
             )
@@ -153,7 +153,7 @@ class TestNoComponentLeavesWithoutAScope:
 
     def _components(self, tmp_path: Path) -> list:
         proj = self._three_paths(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="R") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
             )
@@ -170,14 +170,14 @@ class TestNoComponentLeavesWithoutAScope:
         # Code trifft, der in 0.8.5 den leeren Scope schrieb.
         from types import SimpleNamespace
 
-        from embtrace_check.collector import collect_components
+        from embtrace_sbom.collector import collect_components
         proj = self._three_paths(tmp_path)
         fake = SimpleNamespace(
             name="wolfssl", version="", ecosystem="cmake",
             detection_method="regex-cmake", tier=4, confidence=0.7,
             source_file="lib/tls/CMakeLists.txt", context="",
         )
-        with patch("embtrace_check.collector.run_pipeline",
+        with patch("embtrace_sbom.collector.run_pipeline",
                    return_value=([fake], [], [])):
             comps, _stats = collect_components(proj)
         by_name = {c.name.lower(): c for c in comps}

@@ -1,7 +1,7 @@
 [project]
-name = "embtrace-check"
-version = "0.8.6"
-description = "CRA Readiness Check collector — scans your project's lockfiles and uploads dependency metadata only (never code, never paths). Open source so you can verify exactly what leaves your machine."
+name = "embtrace-sbom"
+version = "0.9.0"
+description = "SBOM generation for embedded builds — CMake, Meson, Autotools, Yocto, Buildroot, Zephyr, vcpkg — one command writes a CycloneDX bill of materials from your build; sends nothing unless you say so. Formerly embtrace-check."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -10,7 +10,7 @@ keywords = ["cra", "cyber-resilience-act", "sbom", "compliance", "embedded", "de
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -33,21 +33,23 @@ dev = [
 
 [project.urls]
 Homepage = "https://embtrace.dev/check"
-Source = "https://github.com/Innomatica-GmbH/embtrace-check"
+Source = "https://github.com/Innomatica-GmbH/embtrace-sbom"
 Privacy = "https://embtrace.dev/check-privacy"
 
 [project.scripts]
-embtrace-check = "embtrace_check.cli:main"
+embtrace-sbom = "embtrace_sbom.cli:main"
+# The old name keeps working — one line of notice, same tool.
+embtrace-check = "embtrace_sbom.cli:main_check_alias"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/embtrace_check"]
+packages = ["src/embtrace_sbom"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["placeholder/"]
+exclude = ["placeholder/", "shim/"]
 
 [tool.ruff]
 target-version = "py311"

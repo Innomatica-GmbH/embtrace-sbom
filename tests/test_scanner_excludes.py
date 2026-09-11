@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from embtrace_check.collector import collect_components
-from embtrace_check.sbom.scanner import prefer_locked, scan_directory_recursive
+from embtrace_sbom.collector import collect_components
+from embtrace_sbom.sbom.scanner import prefer_locked, scan_directory_recursive
 
 
 def test_floor_loses_against_lock_across_directories(tmp_path: Path) -> None:
@@ -66,7 +66,7 @@ def test_payload_has_no_duplicates_from_dist(tmp_path: Path) -> None:
 
 
 def test_prefer_locked_keeps_manifest_only() -> None:
-    from embtrace_check.sbom.scanner import Dependency
+    from embtrace_sbom.sbom.scanner import Dependency
 
     deps = prefer_locked([
         Dependency(name="onlyfloor", version="1.0", ecosystem="pypi",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from embtrace_check.payload import (
+from embtrace_sbom.payload import (
     MAX_PAYLOAD_BYTES,
     CheckComponent,
     CheckStats,

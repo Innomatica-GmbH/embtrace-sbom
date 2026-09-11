@@ -1,4 +1,4 @@
-"""Tests for the embtrace-check CLI (no network access).
+"""Tests for the embtrace-sbom CLI (no network access).
 
 Status messages go to stderr (rich Console), the dry-run payload JSON goes to
 stdout — so ``result.output`` of a dry run is directly ``json.loads``-able.
@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 import pytest
 from click.testing import CliRunner
 
-from embtrace_check import cli as check_cli
-from embtrace_check.core.exceptions import CheckUploadError
+from embtrace_sbom import cli as check_cli
+from embtrace_sbom.core.exceptions import CheckUploadError
 
 if TYPE_CHECKING:
     from pathlib import Path

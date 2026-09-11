@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from embtrace_check.analyzer.normalize import normalize_dep_name
-from embtrace_check.collector import collect_components
-from embtrace_check.core.exceptions import CheckCollectionError
+from embtrace_sbom.analyzer.normalize import normalize_dep_name
+from embtrace_sbom.collector import collect_components
+from embtrace_sbom.core.exceptions import CheckCollectionError
 
 if TYPE_CHECKING:
     from pathlib import Path

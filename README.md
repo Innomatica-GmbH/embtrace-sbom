@@ -1,4 +1,9 @@
-# embtrace-check
+# embtrace-sbom
+
+> **Formerly embtrace-check.** Same tool, same code line, new name — and, from
+> 0.9.0 on, GPL-3.0-or-later. `pipx install embtrace-sbom`; the `embtrace-check`
+> command keeps working with a one-line notice, and the old package installs
+> this one. Releases up to embtrace-check 0.8.6 stay MIT.
 
 **Reads your build, writes your bill of materials — locally.** One command in
 your project folder produces a CycloneDX SBOM, including from **configured
@@ -12,7 +17,7 @@ component inventory, known vulnerabilities with severity.
 
 Most SBOM tools catalog package registries — npm, PyPI, Go, Cargo. Embedded software
 is built differently: CMake, Make, Meson and Autotools source trees, Yocto images,
-Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-check reads.
+Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-sbom reads.
 
 **What you get:**
 
@@ -37,16 +42,16 @@ zero product components for these builds. For registry ecosystems (npm, PyPI, Go
 generic scanners work well — embedded builds are the gap this tool exists for.
 
 ```
-pipx install embtrace-check
-embtrace-check .        # writes sbom.cdx.json, sends nothing
+pipx install embtrace-sbom
+embtrace-sbom .         # writes sbom.cdx.json, sends nothing
 ```
 
 ## Quickstart
 
 ```bash
-pipx install embtrace-check         # or: pip install embtrace-check,
+pipx install embtrace-sbom          # or: pip install embtrace-sbom,
                                     #     or download the standalone binary
-embtrace-check .                    # reads your build, writes sbom.cdx.json
+embtrace-sbom .                     # reads your build, writes sbom.cdx.json
                                     # — and transmits NOTHING
 ```
 
@@ -56,7 +61,7 @@ silently overwritten.
 **Free CRA readiness report** (optional): send the bill explicitly —
 
 ```bash
-embtrace-check . --send --email you@example.com
+embtrace-sbom . --send --email you@example.com
 ```
 
 You are shown exactly what would leave the house (names and versions, no
@@ -64,7 +69,7 @@ paths, no code) and asked to confirm; `--yes` skips the question in scripts.
 No code is required. The report arrives within 24 hours. You can also simply
 e-mail your `sbom.cdx.json` to check@innomatica.de.
 
-More options: `embtrace-check --help` — including `--sbom PATH` (write the
+More options: `embtrace-sbom --help` — including `--sbom PATH` (write the
 SBOM elsewhere), `--output payload.json` for air-gapped environments (send the
 file by mail) and `--with-tools` to additionally use native package-manager
 CLIs for higher-fidelity results.
@@ -107,7 +112,7 @@ deliberately **not** transmitted — a supplier you declare yourself in
 See for yourself before sending anything:
 
 ```bash
-embtrace-check . --dry-run     # prints the exact payload, uploads nothing
+embtrace-sbom . --dry-run      # prints the exact payload, uploads nothing
 ```
 
 Build outputs (`dist/`, `build/`, `node_modules/`, …) and hidden
@@ -143,7 +148,7 @@ never shared or sold. Full notes: <https://embtrace.dev/check-privacy>.
 
 ## About
 
-`embtrace-check` is the free entry point to
+`embtrace-sbom` is the free entry point to
 [embtrace](https://embtrace.dev) — the CRA/NIS2 compliance toolchain for
 embedded software teams by [Innomatica GmbH](https://embtrace.dev/impressum.html).
 The server side (enrichment, vulnerability monitoring, reports) is a
@@ -154,4 +159,8 @@ welcome — please report security topics per [SECURITY.md](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 Innomatica GmbH
+GPL-3.0-or-later, Copyright (C) 2026 Innomatica GmbH — see [LICENSE](LICENSE).
+Releases up to and including embtrace-check 0.8.6 were published under the MIT
+License and remain available under it. The GPL keeps the one argument this
+tool is published for intact: anyone can read, run and verify what it does,
+and improvements to it stay open.

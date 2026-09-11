@@ -13,6 +13,19 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install build && python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
+  pypi-shim:
+    # The old name gets one last release: a thin forwarding shell that
+    # depends on embtrace-sbom — printed instructions keep working.
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions: { id-token: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install build && python -m build shim/embtrace-check --outdir shim-dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: { packages-dir: shim-dist }
   binary:
     runs-on: ubuntu-22.04   # aeltere glibc = laeuft auf mehr Zielsystemen
     permissions: { contents: write }
@@ -21,13 +34,13 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install . pyinstaller
-      - run: pyinstaller embtrace-check.spec --clean --noconfirm
+      - run: pyinstaller embtrace-sbom.spec --clean --noconfirm
       - run: |
-          BIN=embtrace-check-${GITHUB_REF_NAME#v}-linux-x86_64
-          mv dist/embtrace-check "dist/$BIN"
+          BIN=embtrace-sbom-${GITHUB_REF_NAME#v}-linux-x86_64
+          mv dist/embtrace-sbom "dist/$BIN"
           ( cd dist && sha256sum "$BIN" > "$BIN.sha256" )
       - uses: softprops/action-gh-release@v2
         with:
-          name: embtrace-check ${{ github.ref_name }}
+          name: embtrace-sbom ${{ github.ref_name }}
           body_path: .github/release-notes/${{ github.ref_name }}.md
-          files: "dist/embtrace-check-*"
+          files: "dist/embtrace-sbom-*"

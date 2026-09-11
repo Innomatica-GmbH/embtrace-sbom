@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from embtrace_check.cli import main
+from embtrace_sbom.cli import main
 
 
 def _project(tmp_path: Path) -> Path:
@@ -41,7 +41,7 @@ class TestDefaultNeverUploads:
         self, tmp_path: Path,
     ) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up:
+        with patch("embtrace_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(main, [str(proj)])
         assert res.exit_code == 0, res.output
         up.assert_not_called()                      # nothing transmitted
@@ -59,7 +59,7 @@ class TestDefaultNeverUploads:
         # In CI (no TTY) the tool must not block on a question — it prints the
         # invitation and exits.
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up:
+        with patch("embtrace_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(main, [str(proj)])
         assert res.exit_code == 0
         up.assert_not_called()
@@ -73,7 +73,7 @@ class TestSendConfirmsBeforePost:
         self, tmp_path: Path,
     ) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up:
+        with patch("embtrace_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--email", "a@b.de"], input="n\n",
             )
@@ -85,7 +85,7 @@ class TestSendConfirmsBeforePost:
 
     def test_confirming_posts_once(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="REF-1") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="REF-1") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--email", "a@b.de"], input="y\n",
             )
@@ -95,7 +95,7 @@ class TestSendConfirmsBeforePost:
 
     def test_yes_skips_the_question(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="REF-2") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="REF-2") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
             )
@@ -105,7 +105,7 @@ class TestSendConfirmsBeforePost:
     def test_send_needs_only_email_no_code(self, tmp_path: Path) -> None:
         # send_needs_only_email (Ivan 09.09.): the mandatory code is gone.
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload", return_value="R") as up:
+        with patch("embtrace_sbom.cli.upload_payload", return_value="R") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--yes", "--email", "a@b.de"],
             )
@@ -119,7 +119,7 @@ class TestSendConfirmsBeforePost:
         self, tmp_path: Path,
     ) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up:
+        with patch("embtrace_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(main, [str(proj), "--send"])
         assert res.exit_code == 1
         up.assert_not_called()
@@ -157,8 +157,8 @@ class TestNoSend:
 
     def test_no_send_never_asks_and_writes(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up, \
-             patch("embtrace_check.cli._asks_interactively", return_value=True):
+        with patch("embtrace_sbom.cli.upload_payload") as up, \
+             patch("embtrace_sbom.cli._asks_interactively", return_value=True):
             res = CliRunner().invoke(main, [str(proj), "--no-send"])
         assert res.exit_code == 0, res.output
         up.assert_not_called()
@@ -167,7 +167,7 @@ class TestNoSend:
 
     def test_no_send_with_send_is_a_contradiction(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_check.cli.upload_payload") as up:
+        with patch("embtrace_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--no-send", "--send", "--email", "a@b.de"],
             )

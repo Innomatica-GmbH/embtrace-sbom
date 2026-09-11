@@ -1,0 +1,27 @@
+[project]
+name = "embtrace-check"
+version = "0.9.0"
+description = "embtrace-check has moved: it is now embtrace-sbom (same tool, new name). This package installs embtrace-sbom and keeps the embtrace-check command working."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Innomatica GmbH", email = "office@innomatica.de" }]
+classifiers = [
+    "Development Status :: 7 - Inactive",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
+dependencies = ["embtrace-sbom>=0.9.0"]
+
+[project.urls]
+Homepage = "https://embtrace.dev/check"
+Source = "https://github.com/Innomatica-GmbH/embtrace-sbom"
+
+[project.scripts]
+embtrace-check = "embtrace_check:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/embtrace_check"]
