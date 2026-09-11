@@ -13,4 +13,11 @@ jobs:
         with: { python-version: "${{ matrix.python-version }}" }
       - run: pip install -e ".[dev]" -e shim/embtrace-check
       - run: ruff check src tests
-      - run: pytest -q
+      # Failures become check-run annotations (readable without a login,
+      # also through the API) — the raw job log is admin-only.
+      - run: |
+          set -o pipefail
+          pytest -q -p no:cacheprovider 2>&1 | tee pytest-out.txt
+      - if: failure()
+        run: |
+          grep -E "^(FAILED|ERROR|E   |tests/.*::)" pytest-out.txt | head -40 | while IFS= read -r l; do echo "::error::${l}"; done
