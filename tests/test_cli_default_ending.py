@@ -45,7 +45,10 @@ class TestNoQuestion:
         assert "is yours" not in res.output
         assert "Wrote sbom.cdx.json (1 component)." in res.output
         assert "Nothing was transmitted." in res.output
-        assert "embtrace-sbom" in res.output and "--send --email you@example.com" in res.output
+        # one line, even with a long project path (CI tmp paths are long)
+        report_lines = [ln for ln in res.output.splitlines() if "Free CRA readiness report" in ln]
+        assert len(report_lines) == 1, res.output
+        assert report_lines[0].endswith(f"embtrace-sbom {proj} --send --email you@example.com")
         assert "privacy" not in res.output.lower()      # the link belongs to --send
 
     def test_without_a_tty_the_same_text(self, tmp_path: Path) -> None:

@@ -180,11 +180,15 @@ def _print_default_ending(
     11.09.2026: "defaultmäßig nicht fragen, sondern als Output-Text")."""
     noun = "component" if n_components == 1 else "components"
     note = " — previous run replaced" if updated else ""
-    console.print(f"Wrote {written.name} ({n_components} {noun}){note}.")
-    console.print("Nothing was transmitted.")
+    # soft_wrap: these lines are copied from CI logs and pipes — a command
+    # hard-wrapped at 80 columns is a broken command (measured in CI: the
+    # long tmp path wrapped the --send line).
+    console.print(f"Wrote {written.name} ({n_components} {noun}){note}.", soft_wrap=True)
+    console.print("Nothing was transmitted.", soft_wrap=True)
     console.print(
         f"Free CRA readiness report: embtrace-sbom {path_arg} --send "
-        f"--email you@example.com"
+        f"--email you@example.com",
+        soft_wrap=True,
     )
 
 
