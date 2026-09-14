@@ -84,7 +84,8 @@ and what it never does — is spelled out [further down](#what-a-send-contains--
 
 - names, versions and package ecosystems of your dependencies
   (from lockfiles and build files: Conan, vcpkg, CMake, Cargo, npm/yarn/pnpm,
-  Python incl. uv, Go, Maven/Gradle, Meson, Alire, and more),
+  Python incl. uv, Go, Maven/Gradle, Meson, Alire, .NET/NuGet — `packages.lock.json`,
+  `<PackageReference>` in project files, `packages.config` — and more),
 - **Zephyr workspaces**: the `west.yml` module manifest — every module
   with its pinned revision,
 - **Yocto and Buildroot BUILD OUTPUT**: run the check in your build

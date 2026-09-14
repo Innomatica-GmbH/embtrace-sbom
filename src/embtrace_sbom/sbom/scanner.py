@@ -24,6 +24,8 @@ Supports:
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -178,6 +180,7 @@ def _make_purl(ecosystem: str, name: str, version: str) -> str:
         "maven": "maven",
         "gradle": "maven",
         "alire": "alire",
+        "nuget": "nuget",
     }
     purl_type = type_map.get(ecosystem, "generic")
 
@@ -1052,6 +1055,225 @@ def scan_alire_lock(path: Path) -> list[Dependency]:
     return deps
 
 
+# ---------------------------------------------------------------------------
+# NuGet / .NET (order nuget-scanner, Ivan 14.09.2026)
+# ---------------------------------------------------------------------------
+
+#: MSBuild project files that may carry ``<PackageReference>`` (SDK style).
+_MSBUILD_PROJECT_SUFFIXES = (".csproj", ".fsproj", ".vbproj")
+#: Central Package Management: ``<PackageVersion Include= Version=>`` lives
+#: in the nearest Directory.Packages.props above the project.
+_NUGET_CPM_FILE = "Directory.Packages.props"
+_NUGET_CPM_MAX_UP = 8
+#: NuGet version syntax — a bare version is a FLOOR (``>=``), brackets are
+#: intervals, ``*`` floats, ``$(...)`` is an MSBuild property.
+_NUGET_INTERVAL = re.compile(r"^\s*([\[(])\s*([^,\])\s]*)\s*(?:,\s*([^\])\s]*)\s*)?([\])])\s*$")
+
+
+def _msbuild_tag(el: ET.Element) -> str:
+    """Local tag name — old-style project files carry the MSBuild namespace."""
+    tag = el.tag if isinstance(el.tag, str) else ""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _nuget_content_hash(content_hash: object) -> str | None:
+    """NuGet ``contentHash`` = base64 SHA-512 of the .nupkg → hex digest."""
+    if not isinstance(content_hash, str) or not content_hash.strip():
+        return None
+    try:
+        digest = base64.b64decode(content_hash.strip(), validate=True).hex()
+    except (ValueError, binascii.Error):
+        return None
+    return digest if len(digest) == 128 else None
+
+
+def scan_packages_lock_json(path: Path) -> list[Dependency]:
+    """Parse a NuGet ``packages.lock.json`` (RestorePackagesWithLockFile).
+
+    The lockfile is the resolved truth: per target framework every package
+    with ``resolved`` version, ``contentHash`` (SHA-512 of the .nupkg —
+    Befund 97) and its own ``dependencies`` map (the edges, rest list C2).
+    ``type: Project`` entries are ProjectReferences of the same solution —
+    internal, never a third-party component. The same package resolved
+    identically for several frameworks is ONE component.
+    """
+    deps: list[Dependency] = []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to parse %s: %s", path, exc)
+        return deps
+    frameworks = data.get("dependencies") if isinstance(data, dict) else None
+    if not isinstance(frameworks, dict):
+        logger.warning("No dependencies section in %s", path)
+        return deps
+    seen: dict[tuple[str, str], Dependency] = {}
+    for packages in frameworks.values():
+        if not isinstance(packages, dict):
+            continue
+        for name, info in packages.items():
+            if not isinstance(info, dict) or not name:
+                continue
+            if str(info.get("type", "")).lower() == "project":
+                continue
+            resolved = str(info.get("resolved") or "").strip()
+            if not resolved:
+                continue
+            key = (name.lower(), resolved)
+            rel = info.get("dependencies")
+            edges = sorted(str(k) for k in rel) if isinstance(rel, dict) and rel else []
+            dep = seen.get(key)
+            if dep is None:
+                dep = Dependency(
+                    name=name,
+                    version=resolved,
+                    ecosystem="nuget",
+                    purl=_make_purl("nuget", name, resolved),
+                )
+                dep.hash_sha512 = _nuget_content_hash(info.get("contentHash"))
+                if edges:
+                    dep.dependencies = edges
+                seen[key] = dep
+                deps.append(dep)
+            elif edges:
+                dep.dependencies = sorted(set(dep.dependencies or []) | set(edges))
+    logger.info("Found %d dependencies in %s", len(deps), path)
+    return deps
+
+
+def nuget_version_fields(raw: str) -> tuple[str, str]:
+    """(floor version, declared range) for a ``<PackageReference>`` version.
+
+    NuGet reads a bare ``13.0.3`` as ``>= 13.0.3`` — a floor, honest as a
+    manifest minimum. ``[1.2.3]`` is exact, ``[1.0, 2.0)`` has the floor
+    ``1.0`` and keeps the range. A floating ``1.0.*``/``*``, an exclusive
+    lower bound ``(1.0, )`` or an MSBuild property ``$(PkgVersion)`` carries
+    no version we could state — the reference is UNRESOLVED (empty version,
+    range kept; order nuget-scanner: never invent a version).
+    """
+    text = (raw or "").strip()
+    if not text:
+        return "", ""
+    if "$(" in text or "*" in text:
+        return "", text
+    m = _NUGET_INTERVAL.match(text)
+    if m is None:
+        return ("", text) if is_version_range(text) else (text, "")
+    open_br, low, high, _close = m.groups()
+    low = (low or "").strip()
+    high = (high or "").strip()
+    if high is None or m.group(3) is None:
+        # "[1.2.3]" exact pin (single element) — or "[1.2.3" garbage
+        return (low, "") if open_br == "[" and low and not is_version_range(low) else ("", text)
+    if open_br == "[" and low and not is_version_range(low):
+        return low, text
+    return "", text
+
+
+def _central_package_versions(start: Path) -> dict[str, str]:
+    """``PackageVersion`` entries of the nearest Directory.Packages.props."""
+    current = start
+    for _ in range(_NUGET_CPM_MAX_UP):
+        props = current / _NUGET_CPM_FILE
+        if props.is_file():
+            versions: dict[str, str] = {}
+            try:
+                root = ET.parse(props).getroot()  # noqa: S314
+            except (ET.ParseError, OSError) as exc:
+                logger.warning("Failed to parse %s: %s", props, exc)
+                return versions
+            for el in root.iter():
+                if _msbuild_tag(el) == "PackageVersion" and el.get("Include"):
+                    versions[el.get("Include", "").lower()] = el.get("Version", "") or ""
+            return versions
+        if current.parent == current:
+            break
+        current = current.parent
+    return {}
+
+
+def scan_msbuild_project(path: Path) -> list[Dependency]:
+    """Parse ``<PackageReference>`` from a .csproj/.fsproj/.vbproj or a
+    Directory.Build.props — declared references, i.e. manifest floors.
+
+    Version comes from the ``Version`` attribute, a ``<Version>`` child, a
+    ``VersionOverride``, or Central Package Management
+    (Directory.Packages.props). ``Update=`` items only edit references
+    declared elsewhere and add nothing. A range, floating or property
+    version is kept as ``declared_range`` with an empty version (Befund 30).
+    Where a packages.lock.json exists, :func:`prefer_locked` drops these
+    floors in favour of the resolved versions.
+    """
+    deps: list[Dependency] = []
+    try:
+        root = ET.parse(path).getroot()  # noqa: S314
+    except (ET.ParseError, OSError) as exc:
+        logger.warning("Failed to parse %s: %s", path, exc)
+        return deps
+    central: dict[str, str] | None = None
+    for el in root.iter():
+        if _msbuild_tag(el) not in ("PackageReference", "GlobalPackageReference"):
+            continue
+        name = (el.get("Include") or "").strip()
+        if not name:
+            continue
+        raw = (el.get("VersionOverride") or el.get("Version") or "").strip()
+        if not raw:
+            for child in el:
+                if _msbuild_tag(child) == "Version" and child.text:
+                    raw = child.text.strip()
+                    break
+        if not raw:
+            if central is None:
+                central = _central_package_versions(path.parent)
+            raw = central.get(name.lower(), "")
+        version, declared_range = nuget_version_fields(raw)
+        deps.append(Dependency(
+            name=name,
+            version=version,
+            ecosystem="nuget",
+            purl=_make_purl("nuget", name, version),
+            source_kind="manifest",
+            declared_range=declared_range,
+        ))
+    logger.info("Found %d dependencies in %s", len(deps), path)
+    return deps
+
+
+def scan_packages_config(path: Path) -> list[Dependency]:
+    """Parse the classic NuGet ``packages.config`` (``<package id= version=>``).
+
+    The old format still lives in industrial .NET Framework and
+    nanoFramework projects. Versions are the installed ones (resolved);
+    ``developmentDependency="true"`` marks build tooling that never ships
+    (scope excluded, the npm dev rule).
+    """
+    deps: list[Dependency] = []
+    try:
+        root = ET.parse(path).getroot()  # noqa: S314
+    except (ET.ParseError, OSError) as exc:
+        logger.warning("Failed to parse %s: %s", path, exc)
+        return deps
+    for el in root.iter():
+        if _msbuild_tag(el) != "package":
+            continue
+        name = (el.get("id") or "").strip()
+        version = (el.get("version") or "").strip()
+        if not name or not version:
+            continue
+        dep = Dependency(
+            name=name,
+            version=version,
+            ecosystem="nuget",
+            purl=_make_purl("nuget", name, version),
+        )
+        if (el.get("developmentDependency") or "").strip().lower() == "true":
+            dep.scope = "excluded"
+        deps.append(dep)
+    logger.info("Found %d dependencies in %s", len(deps), path)
+    return deps
+
+
 def _fpga_purl(vendor: str, name: str, version: str) -> str:
     """purl for an FPGA IP core — vendor as namespace keeps same-named cores
     from different suppliers distinguishable. Version omitted when unknown."""
@@ -1330,6 +1552,13 @@ _SCANNERS: dict[str, tuple[str, type[object] | None]] = {
     "pom.xml": ("pom_xml", None),
     "go.sum": ("go_sum", None),
     "alire.lock": ("alire_lock", None),
+    # NuGet / .NET (order nuget-scanner, nachgezogen aus der Suite 0.15.66):
+    # the lockfile is the resolved truth, packages.config the classic
+    # installed set, Directory.Build.props a solution-wide manifest.
+    # *.csproj/*.fsproj/*.vbproj are matched by suffix in scan_directory.
+    "packages.lock.json": ("packages_lock_json", None),
+    "packages.config": ("packages_config", None),
+    "Directory.Build.props": ("msbuild_project", None),
 }
 
 _SCANNER_FUNCS = {
@@ -1352,6 +1581,9 @@ _SCANNER_FUNCS = {
     "gradle_lockfile": scan_gradle_lockfile,
     "pom_xml": scan_pom_xml,
     "go_sum": scan_go_sum,
+    "packages_lock_json": scan_packages_lock_json,
+    "packages_config": scan_packages_config,
+    "msbuild_project": scan_msbuild_project,
     "alire_lock": scan_alire_lock,
 }
 
@@ -1390,6 +1622,12 @@ def scan_directory(
                 all_deps.extend(scan_cmake(filepath, cmake_ctx=cmake_ctx))
             else:
                 all_deps.extend(_SCANNER_FUNCS[scanner_key](filepath))
+    # MSBuild project files are named after the project — matched by suffix.
+    for suffix in _MSBUILD_PROJECT_SUFFIXES:
+        for project_file in sorted(path.glob(f"*{suffix}")):
+            if project_file.is_file():
+                logger.info("Detected %s", project_file)
+                all_deps.extend(scan_msbuild_project(project_file))
 
     # FPGA IP cores: a Vivado handoff (.hwh) already lists every core of a
     # block design — per-IP .xci files are only consulted when no handoff
@@ -1652,7 +1890,10 @@ def scan_directory_recursive(
     seen: set[tuple[str, str, str]] = set()
     unique: list[Dependency] = []
     for dep in all_deps:
-        key = (dep.name, dep.version, dep.ecosystem)
+        # NuGet ids are case-insensitive: Newtonsoft.Json and newtonsoft.json
+        # from two project files are ONE component.
+        name_key = dep.name.lower() if dep.ecosystem == "nuget" else dep.name
+        key = (name_key, dep.version, dep.ecosystem)
         if key not in seen:
             seen.add(key)
             unique.append(dep)
