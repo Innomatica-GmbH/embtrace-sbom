@@ -25,7 +25,7 @@ _CONFIDENCE = 0.90
 # Cargo.toml (Rust)
 # ---------------------------------------------------------------------------
 
-def _is_local_crate(spec: dict, manifest: Path, dep_name: str) -> bool:
+def _is_local_crate(spec: dict[str, object], manifest: Path, dep_name: str) -> bool:
     """True when a ``path = "..."`` dependency points at a crate INSIDE the
     customer's own tree (a workspace member).
 
@@ -45,7 +45,10 @@ def _is_local_crate(spec: dict, manifest: Path, dep_name: str) -> bool:
         data = tomllib.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    name = (data.get("package") or {}).get("name")
+    package = data.get("package")
+    if not isinstance(package, dict):
+        return False
+    name = package.get("name")
     return isinstance(name, str) and name.strip().lower() == dep_name.strip().lower()
 
 
