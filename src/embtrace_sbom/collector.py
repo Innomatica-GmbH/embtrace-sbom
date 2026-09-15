@@ -20,6 +20,7 @@ from embtrace_sbom.analyzer.normalize import normalize_dep_name
 from embtrace_sbom.analyzer.pipeline import run_pipeline
 from embtrace_sbom.analyzer.scanner import _apply_cmake_conditions, collect_build_files
 from embtrace_sbom.core.exceptions import CheckCollectionError
+from embtrace_sbom.diagnosis import record_failure
 from embtrace_sbom.payload import CheckComponent, CheckStats
 from embtrace_sbom.sbom.classify import (
     _C_KEYWORDS,
@@ -319,9 +320,13 @@ def collect_components(
     # customer's image (run the check in the build directory).
     from embtrace_sbom.sbom.buildoutput import scan_build_output
 
-    build_output_deps, build_output_sources = scan_build_output(
-        path, max_depth=max_depth,
-    )
+    try:
+        build_output_deps, build_output_sources = scan_build_output(
+            path, max_depth=max_depth,
+        )
+    except Exception as exc:  # noqa: BLE001 — a reader defect, recorded, not fatal
+        record_failure("build_output", "deploy/images/*.manifest | legal-info/manifest.csv", exc)
+        build_output_deps, build_output_sources = [], []
     for dep in build_output_deps:
         clean_dependency(dep)  # control-char hygiene (Befund 15)
         # Resolved, installed packages — the skip list never applies.

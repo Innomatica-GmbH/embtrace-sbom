@@ -133,13 +133,46 @@ you exactly what it looks for and where.
 This collector is open source so that you can verify exactly what leaves
 your machine.
 
+## When the tool fails: the diagnosis file
+
+A defect in embtrace-sbom must not be a silent gap in your bill, and it
+must not phone home either. When a reader crashes (or the tool crashes
+elsewhere), the run
+
+- continues with the other readers and still writes the SBOM,
+- says in red which reader failed (`pom.xml (KeyError)`), that the bill is
+  **incomplete**, and that this is a defect in the tool, not in your project,
+- writes `embtrace-sbom-diagnosis.json` next to the SBOM, names the path,
+  and asks you to mail it to <support@innomatica.de>,
+- ends with exit code 1.
+
+Nothing is sent automatically — the file leaves your machine only if you
+send it. Open it first. It contains: tool version, Python version, operating
+system, which reader failed, the exception *type*, the call chain inside
+embtrace-sbom, and the file *pattern* the reader was called for (a name from
+the tool's own tables, e.g. `pom.xml` or `*.csproj`). It never contains
+package names, versions, licenses, file paths, file contents, environment
+variables, host names — or the exception message (a `KeyError`'s message is
+a key, and a key is often a package name). The boundary is one function,
+`own_frames()` in `src/embtrace_sbom/diagnosis.py`, and `tests/test_diagnosis.py`
+runs a fabricated crash against canary data to prove nothing gets through.
+
+A build system the tool does not read yet is **not** a defect: if nothing
+readable is found but markers of a known-but-unread build system are
+(Bazel, SCons, Keil, IAR, PlatformIO, Swift PM, Composer, …), the run keeps
+exit code 2, names the markers by label and count (`bazel (2), keil (1)`),
+and writes the same file with `"kind": "unsupported_build"` — labels and
+counts only, no file names. Next to a build system it does read, an unread
+one is named in a dim line and no file is written. Developers who want the
+plain traceback set `EMBTRACE_SBOM_TRACEBACK=1`.
+
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0    | success |
-| 1    | error (network, missing --email with --send, …) |
-| 2    | no components found — declare dependencies manually in `embtrace-deps.yaml` |
+| 1    | error (network, missing --email with --send, a crashed reader — the bill is incomplete, diagnosis file written, …) |
+| 2    | no supported build system found — declare dependencies manually in `embtrace-deps.yaml`; markers of unread build systems are named |
 
 ## Privacy
 

@@ -7,18 +7,21 @@ Usage:
     embtrace-sbom . --dry-run                # show exactly what a send would contain
     embtrace-sbom . --output payload.json    # offline / firewall fallback
 
-Exit codes: 0 = success, 1 = error, 2 = no components found.
+Exit codes: 0 = success, 1 = error (including a defect in a reader — the
+bill is incomplete, a local diagnosis file is written), 2 = no supported
+build system found.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 import click
 from rich.console import Console
 
-from embtrace_sbom import __version__
+from embtrace_sbom import __version__, diagnosis
 from embtrace_sbom.collector import collect_components
 from embtrace_sbom.core.exceptions import EmbtraceError
 from embtrace_sbom.payload import CheckPayload, build_payload
@@ -171,6 +174,63 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
     except EmbtraceError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         sys.exit(exc.exit_code)
+    except (click.Abort, click.ClickException, click.exceptions.Exit):
+        raise
+    except Exception as exc:  # noqa: BLE001 — the tool itself broke outside a reader
+        # No traceback on the customer's screen, no silent exit: a local
+        # diagnosis file and one sentence asking for a mail. Developers get
+        # the plain traceback with EMBTRACE_SBOM_TRACEBACK=1.
+        if os.environ.get(diagnosis.TRACEBACK_ENV):
+            raise
+        where = diagnosis.write_report(diagnosis.crash_report(exc), near=path)
+        console.print(
+            f"[red]Error:[/red] embtrace-sbom stopped with an internal error "
+            f"({type(exc).__name__}) — a defect in the tool, not in your project.",
+            soft_wrap=True,
+        )
+        _print_diagnosis_request(where, fix="so the defect gets fixed")
+        console.print(
+            f"[dim]Full traceback: {diagnosis.TRACEBACK_ENV}=1[/dim]", soft_wrap=True,
+        )
+        sys.exit(1)
+    if diagnosis.failures():
+        # A reader crashed during the run: the bill was written and shown,
+        # but it is incomplete — a CI job must see that (Befund 43 parity:
+        # a collector defect is never a green run).
+        sys.exit(1)
+
+
+def _print_diagnosis_request(where: Path, *, fix: str) -> None:
+    """The one sentence the order asks for: where the file is, what it
+    does not contain, and the request to mail it — by hand, never by us."""
+    console.print(
+        f"Diagnosis written to {where} — no package names, versions or "
+        f"paths; open it and check.",
+        soft_wrap=True,
+    )
+    console.print(
+        f"Please mail it to {diagnosis.SUPPORT_ADDRESS} {fix}. Nothing is "
+        f"sent automatically.",
+        soft_wrap=True,
+    )
+
+
+def _print_reader_failures(
+    failures: list[diagnosis.ReaderFailure], where: Path,
+) -> None:
+    """A reader crashed: say which (by pattern and exception type), say that
+    the bill is incomplete, and say whose fault it is — ours."""
+    named = ", ".join(
+        f"{f.pattern or f.reader or 'run'} ({f.exc_type})" for f in failures
+    )
+    noun = "reader" if len(failures) == 1 else "readers"
+    console.print(
+        f"[red]{len(failures)} {noun} failed:[/red] {named} — the bill of "
+        f"materials is INCOMPLETE. A defect in embtrace-sbom, not in your "
+        f"project.",
+        soft_wrap=True,
+    )
+    _print_diagnosis_request(where, fix="so the reader gets fixed")
 
 
 def _print_default_ending(
@@ -264,11 +324,31 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         sys.exit(1)
 
     console.print(f"[bold]embtrace-sbom[/bold] {__version__} — scanning {path.resolve().name}/")
+    diagnosis.reset()
     components, stats = collect_components(
         path,
         with_tools=with_tools,
         include_declared_metadata=not no_declared_metadata,
     )
+    # The diagnosis file lives next to the SBOM (order
+    # idee-fehlerrueckmeldung-sammler): the project directory, or the
+    # directory of --sbom.
+    diag_dir = (sbom_path or (path / "sbom.cdx.json")).parent
+    failed_readers = diagnosis.failures()
+    if failed_readers:
+        # "Werkzeug kaputt": a reader crashed on this tree. The run goes on
+        # with what the other readers found, says so in red, writes the
+        # local diagnosis file, and ends with exit 1 (see main()).
+        where = diagnosis.write_report(
+            diagnosis.tool_error_report(
+                failed_readers, build_files_scanned=stats.build_files_scanned,
+            ),
+            near=diag_dir,
+        )
+        _print_reader_failures(failed_readers, where)
+    # "Bausystem nicht unterstützt": markers of build systems we do not read
+    # yet, counted by our own labels — a roadmap line, never a defect.
+    unread = diagnosis.find_unsupported_markers(path)
     # Conditional alternatives travel MARKED, not as components (Befund 44).
     real = [c for c in components if not c.condition]
     conditional = [c for c in components if c.condition]
@@ -321,10 +401,31 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
                 "embtrace-sbom can read build/CMakeCache.txt.\n"
                 "Adjust exclusions via a committed .embtraceignore."
             )
+        if stats.build_files_scanned == 0 and unread:
+            # Nothing we read, but something we recognise: the file names
+            # only which of OUR labels were seen and how often — the
+            # customer's file names stay on the customer's disk.
+            where = diagnosis.write_report(
+                diagnosis.unsupported_build_report(
+                    unread, build_files_scanned=stats.build_files_scanned,
+                ),
+                near=diag_dir,
+            )
+            console.print(
+                f"Build-system markers seen that embtrace-sbom does not read "
+                f"yet: {diagnosis.format_markers(unread)}.",
+                soft_wrap=True,
+            )
+            _print_diagnosis_request(
+                where, fix="if you want your build system supported",
+            )
         # A read build system that yields nothing (self-contained) or only
         # conditional backends is a VALID result, not a failure — a clean
         # library run in CI must not fail (Befund 44 follow-up). Only "no
-        # build system found at all" stays exit 2.
+        # build system found at all" stays exit 2 — and a crashed reader
+        # is an error before anything else.
+        if failed_readers:
+            sys.exit(1)
         sys.exit(2 if stats.build_files_scanned == 0 else 0)
 
     console.print(
@@ -341,6 +442,15 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         )
     for src in stats.build_output_sources:
         console.print(f"[dim]Build output: {src}[/dim]")
+    if unread:
+        # Read build systems next to unread ones (CMake beside Bazel): say
+        # what was not read, so an incomplete bill is never mistaken for a
+        # complete one. No file — the run itself is fine.
+        console.print(
+            f"[dim]Not read (no reader yet): {diagnosis.format_markers(unread)} "
+            f"— tell {diagnosis.SUPPORT_ADDRESS} if you need it.[/dim]",
+            soft_wrap=True,
+        )
     mehrfach = len(real) - len({c.name.lower() for c in real})
     if mehrfach:
         console.print(

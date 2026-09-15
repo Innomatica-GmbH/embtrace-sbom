@@ -31,6 +31,7 @@ import os
 import re
 import tomllib
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
 
@@ -38,6 +39,7 @@ import yaml
 from pydantic import BaseModel
 
 from embtrace_sbom.core.log import get_logger
+from embtrace_sbom.diagnosis import record_failure
 from embtrace_sbom.sbom.cmake_conditions import (
     CMakeContext,
     build_cmake_context,
@@ -1588,6 +1590,31 @@ _SCANNER_FUNCS = {
 }
 
 
+def _read_with(
+    reader: str,
+    pattern: str,
+    func: Callable[..., list[Dependency]],
+    filepath: Path,
+    **kwargs: object,
+) -> list[Dependency]:
+    """Call one reader on one file; a crash inside it is a defect of THIS tool.
+
+    Readers handle unreadable input themselves (a warning, an empty list).
+    Anything else that escapes — a ``KeyError`` on a shape we did not
+    expect, an ``IndexError`` in our own logic — is recorded for the local
+    diagnosis file (:mod:`embtrace_sbom.diagnosis`) under the reader's key
+    and the file PATTERN from our tables, and the scan continues with the
+    next file. Never silent, never a traceback on the customer's screen,
+    never the file's real name or path in the record.
+    """
+    try:
+        return func(filepath, **kwargs)
+    except Exception as exc:  # noqa: BLE001 — every reader defect, whatever its type
+        record_failure(reader, pattern, exc)
+        logger.debug("Reader %s crashed on %s", reader, filepath, exc_info=True)
+        return []
+
+
 def scan_directory(
     path: Path, *, fpga_recursive: bool = True,
     cmake_ctx: CMakeContext | None = None,
@@ -1619,15 +1646,21 @@ def scan_directory(
         if filepath.is_file():
             logger.info("Detected %s", filepath)
             if scanner_key == "cmake":
-                all_deps.extend(scan_cmake(filepath, cmake_ctx=cmake_ctx))
+                all_deps.extend(_read_with(
+                    "cmake", filename, scan_cmake, filepath, cmake_ctx=cmake_ctx,
+                ))
             else:
-                all_deps.extend(_SCANNER_FUNCS[scanner_key](filepath))
+                all_deps.extend(_read_with(
+                    scanner_key, filename, _SCANNER_FUNCS[scanner_key], filepath,
+                ))
     # MSBuild project files are named after the project — matched by suffix.
     for suffix in _MSBUILD_PROJECT_SUFFIXES:
         for project_file in sorted(path.glob(f"*{suffix}")):
             if project_file.is_file():
                 logger.info("Detected %s", project_file)
-                all_deps.extend(scan_msbuild_project(project_file))
+                all_deps.extend(_read_with(
+                    "msbuild_project", f"*{suffix}", scan_msbuild_project, project_file,
+                ))
 
     # FPGA IP cores: a Vivado handoff (.hwh) already lists every core of a
     # block design — per-IP .xci files are only consulted when no handoff
@@ -1642,15 +1675,15 @@ def scan_directory(
         cxf_files = sorted(path.glob("*.cxf"))
     for hwh_file in hwh_files:
         logger.info("Detected %s", hwh_file)
-        all_deps.extend(scan_vivado_hwh(hwh_file))
+        all_deps.extend(_read_with("vivado_hwh", "*.hwh", scan_vivado_hwh, hwh_file))
     if not hwh_files:
         for xci_file in xci_files:
             logger.info("Detected %s", xci_file)
-            all_deps.extend(scan_vivado_xci(xci_file))
+            all_deps.extend(_read_with("vivado_xci", "*.xci", scan_vivado_xci, xci_file))
     for tcl_file in tcl_files:
-        all_deps.extend(scan_fpga_tcl(tcl_file))
+        all_deps.extend(_read_with("fpga_tcl", "*.tcl", scan_fpga_tcl, tcl_file))
     for cxf_file in cxf_files:
-        all_deps.extend(scan_libero_cxf(cxf_file))
+        all_deps.extend(_read_with("libero_cxf", "*.cxf", scan_libero_cxf, cxf_file))
 
     # Post-build enrichment: generated component data (.cxf) carries the
     # resolved version — it supersedes script-derived entries whose version
