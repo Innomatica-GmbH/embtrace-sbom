@@ -25,6 +25,30 @@ _CONFIDENCE = 0.90
 # Cargo.toml (Rust)
 # ---------------------------------------------------------------------------
 
+def _is_local_crate(spec: dict, manifest: Path, dep_name: str) -> bool:
+    """True when a ``path = "..."`` dependency points at a crate INSIDE the
+    customer's own tree (a workspace member).
+
+    A multi-crate repository writes ``grep = { version = "0.4.1", path =
+    "crates/grep" }``: the version is what gets published to crates.io, the
+    path is what this build actually uses. Measured on ripgrep (15.09.2026),
+    the free check listed globset, ignore and grep-matcher — the project's
+    OWN crates — as third-party components of the customer's product.
+    Only a ``path`` resolving to a Cargo.toml that declares the SAME package
+    name counts; anything unresolvable is left alone rather than guessed.
+    """
+    raw = spec.get("path")
+    if not isinstance(raw, str) or not raw:
+        return False
+    try:
+        target = (manifest.parent / raw / "Cargo.toml").resolve()
+        data = tomllib.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    name = (data.get("package") or {}).get("name")
+    return isinstance(name, str) and name.strip().lower() == dep_name.strip().lower()
+
+
 class CargoTomlParser:
     """Parse Cargo.toml using tomllib — handles inline tables, workspace, etc."""
 
@@ -58,6 +82,11 @@ class CargoTomlParser:
                     has_version = "version" in spec
                     has_git = "git" in spec
                     if has_path and not has_version and not has_git:
+                        continue
+                    # …and a `version` + `path` pair naming a crate of the same
+                    # name in this tree is a workspace member too: the version
+                    # is for publishing, the path is what actually builds.
+                    if has_path and _is_local_crate(spec, file_path, str(name)):
                         continue
                     version = spec.get("version", "")
                 # Use the canonical crate name if renamed via `package = "real-name"`
@@ -95,6 +124,11 @@ class CargoTomlParser:
                             has_version = "version" in spec
                             has_git = "git" in spec
                             if has_path and not has_version and not has_git:
+                                continue
+                            # …and a `version` + `path` pair naming a crate of the same
+                            # name in this tree is a workspace member too: the version
+                            # is for publishing, the path is what actually builds.
+                            if has_path and _is_local_crate(spec, file_path, str(name)):
                                 continue
                             version = spec.get("version", "")
                         canonical_name = (

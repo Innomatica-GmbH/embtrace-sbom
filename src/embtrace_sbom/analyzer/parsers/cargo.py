@@ -49,16 +49,29 @@ def _extract_package_name(table_content: str) -> str | None:
 
 
 def _has_path_only(table_content: str) -> bool:
-    """Check if a table-style dependency is path-only (internal)."""
+    """True when a table-style dependency comes from the customer's own tree.
+
+    Text-level rule (this is the regex fallback, tier 4): any `path = "..."`
+    without a `git` source. The structured parser (tier 2) makes the finer
+    call — it resolves the path and only drops the dependency when the
+    Cargo.toml there declares the SAME package name — and tier 2 wins in the
+    merge, so a vendored third-party crate is still listed whenever its
+    manifest parses.
+    """
     has_path = "path" in table_content
-    has_version = "version" in table_content
     has_git = "git" in table_content
     has_workspace = re.search(r"workspace\s*=\s*true", table_content) is not None
     # workspace = true without external source = workspace/internal dep
     if has_workspace and not has_git:
         return True
-    # path-only without version = workspace/internal dep
-    return has_path and not has_version and not has_git
+    # A `path` says this crate is built from the customer's OWN tree. A
+    # multi-crate repository writes both: `globset = { version = "0.4.18",
+    # path = "../globset" }` — the version is what gets published to
+    # crates.io, the path is what this build uses. Measured on ripgrep
+    # (15.09.2026), the free check listed globset, ignore, grep and
+    # grep-matcher (ripgrep's own crates) as third-party components.
+    # A `git` source still points outside the tree and stays.
+    return has_path and not has_git
 
 
 def parse(content: str) -> list[str]:
