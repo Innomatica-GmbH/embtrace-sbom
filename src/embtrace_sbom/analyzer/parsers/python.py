@@ -116,6 +116,14 @@ _INI_CONFIG_SECTION = re.compile(
 )
 
 
+#: PEP 735 lets a dependency group INCLUDE another group:
+#: ``all = [{ include-group = 'dev' }, { include-group = 'docs' }]``.
+#: The quoted word there is a GROUP NAME, not a package — measured on
+#: pydantic (15.09.2026), where the free check listed `dev`, `docs` and
+#: `linting` as components of the customer's product.
+_INCLUDE_GROUP = re.compile(r"""\{\s*include-group\s*=\s*['"][^'"]+['"]\s*\}""")
+
+
 def _extract_names_from_list(text: str) -> set[str]:
     """Extract package names from a Python list/string of dependencies.
 
@@ -129,6 +137,10 @@ def _extract_names_from_list(text: str) -> set[str]:
     inside double-quoted values like ``"pkg ; impl == 'CPython'"``.
     """
     names: set[str] = set()
+
+    # A group reference is not a dependency (PEP 735) — drop the whole
+    # inline table before any name is read out of it.
+    text = _INCLUDE_GROUP.sub(" ", text)
 
     # Match double-quoted strings first (preferred in TOML/pyproject.toml)
     # then single-quoted strings as fallback (setup.py, setup.cfg).
