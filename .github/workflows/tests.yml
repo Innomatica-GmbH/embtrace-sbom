@@ -4,9 +4,15 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Our audience is hybrid: a .NET developer sits in front of Windows. The
+    # collector had never run there (order idee-fehlerrueckmeldung-sammler,
+    # 15.09.2026) — what breaks on windows-latest is a finding, not a nuisance.
+    runs-on: ${{ matrix.os }}
     strategy:
-      matrix: { python-version: ["3.11", "3.12"] }
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,9 +21,11 @@ jobs:
       - run: ruff check src tests
       # Failures become check-run annotations (readable without a login,
       # also through the API) — the raw job log is admin-only.
-      - run: |
+      - shell: bash
+        run: |
           set -o pipefail
           pytest -q -p no:cacheprovider 2>&1 | tee pytest-out.txt
       - if: failure()
+        shell: bash
         run: |
           grep -E "^(FAILED|ERROR|E   |tests/.*::)" pytest-out.txt | head -40 | while IFS= read -r l; do echo "::error::${l}"; done
