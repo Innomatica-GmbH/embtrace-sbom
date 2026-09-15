@@ -91,6 +91,23 @@ def _is_parser_noise(name: str, version: str, ecosystem: str) -> bool:
     return len(clean) <= 1
 
 
+def _identity(name: str) -> str:
+    """Identity of a component for de-duplication: its OWN name, folded to
+    lower case — never the fuzzy matching form.
+
+    ``normalize_dep_name`` exists to MATCH names across spellings (a CMake
+    ``GStreamer_video`` against a pkg-config ``gstreamer``), and it strips
+    component suffixes like ``_core``, ``_client``, ``_base``. Used as a
+    de-duplication key it silently merges packages that are not the same
+    package: measured 15.09.2026 over six real trees, 9 components vanished
+    from the bill without a trace — ``serde_core`` behind ``serde``,
+    ``playwright-core`` behind ``playwright``, ``@sentry/node-core`` behind
+    ``@sentry/node``, ``@docusaurus/utils-common`` behind
+    ``@docusaurus/utils``. Each has its own version and its own CVE history.
+    """
+    return name.strip().lower()
+
+
 def collect_components(
     path: Path,
     *,
@@ -186,7 +203,7 @@ def collect_components(
             _add_conditional(dep.name, dep.version, dep.ecosystem,
                              dep.condition, _LOCKFILE_TIER)
             continue
-        key = (normalize_dep_name(dep.name), dep.version)
+        key = (_identity(dep.name), dep.version)
         if key in merged:
             continue
         # A tool / program-only Find module the scanner already marked
@@ -260,7 +277,10 @@ def collect_components(
     # do this itself, so the collector must (the suite does it in
     # analyze_with_pipeline).
     pipeline_deps = _apply_cmake_conditions(pipeline_deps, path)
-    seen_names = {name for name, _version in merged}
+    # Cross-path match stays fuzzy (a build file writes
+    # `GStreamer_video` for what the lockfile calls `gstreamer`);
+    # only the identity key above is exact.
+    seen_names = {normalize_dep_name(name) for name, _version in merged}
     for pdep in pipeline_deps:
         pdep.name = strip_control_chars(pdep.name)
         if _not_component(pdep.name):
@@ -276,7 +296,7 @@ def collect_components(
             continue
         if _is_parser_noise(pdep.name, pdep.version, pdep.ecosystem):
             continue
-        key = (normalize_dep_name(pdep.name), pdep.version)
+        key = (_identity(pdep.name), pdep.version)
         if key in merged:
             continue
         src_parts = Path(pdep.source_file).parts if pdep.source_file else ()
@@ -330,7 +350,7 @@ def collect_components(
     for dep in build_output_deps:
         clean_dependency(dep)  # control-char hygiene (Befund 15)
         # Resolved, installed packages — the skip list never applies.
-        key = (normalize_dep_name(dep.name), dep.version)
+        key = (_identity(dep.name), dep.version)
         if key in merged:
             continue
         merged[key] = CheckComponent(
