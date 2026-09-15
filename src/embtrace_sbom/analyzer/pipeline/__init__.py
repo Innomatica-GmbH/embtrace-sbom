@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from embtrace_sbom.analyzer.pipeline.base import ScanResult, TierScanner
 from embtrace_sbom.analyzer.pipeline.merge import merge_results
 from embtrace_sbom.core.log import get_logger
+from embtrace_sbom.diagnosis import record_failure
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -124,7 +125,12 @@ def run_pipeline(
                             len(result.dependencies),
                             file_path,
                         )
-                except Exception:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001
+                    # A crash here is a defect of this tool, not of the
+                    # customer's file: recorded for the local diagnosis
+                    # file (reader = tier + scanner, pattern = the file
+                    # TYPE from our table), the pipeline continues.
+                    record_failure(f"tier{scanner.tier}:{scanner.name}", file_type, exc)
                     logger.debug(
                         "Tier %d [%s] failed on %s",
                         scanner.tier,
@@ -148,7 +154,8 @@ def run_pipeline(
                     scanner.name,
                     len(result.dependencies),
                 )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            record_failure(f"tier{scanner.tier}:{scanner.name}", "_project", exc)
             logger.debug(
                 "Tier %d [%s] failed (project-wide)",
                 scanner.tier,
