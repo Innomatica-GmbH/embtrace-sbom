@@ -786,10 +786,23 @@ def scan_package_lock_json(path: Path) -> list[Dependency]:
 
 _YARN_ENTRY = re.compile(r'^"?(@?[^@\s"][^"]*?)@')
 _YARN_VERSION = re.compile(r'^\s+version\s+"(.+)"')
+#: Yarn Berry (v2+, ``__metadata: version: N``) writes ``version: 4.4.0`` —
+#: a colon, no quotes. Without this line the reader saw NOTHING in a Berry
+#: lockfile: measured on streamlit's frontend (1,591 entries) the collector
+#: reported 0 from yarn.lock and 167 from package.json manifests, the suite
+#: 1,573 (twin comparison, kettenlauf schnell #67, 15.09.2026).
+_YARN_VERSION_BERRY = re.compile(r'^\s+version:\s+"?([^"\s]+)"?\s*$')
+#: Berry protocols that point at the customer's OWN tree, never at a
+#: third-party package: workspace members, links and portals.
+_YARN_LOCAL_PROTOCOLS = ("@workspace:", "@link:", "@portal:")
 
 
 def scan_yarn_lock(path: Path) -> list[Dependency]:
-    """Parse a Yarn Classic (v1) yarn.lock file."""
+    """Parse a yarn.lock — Yarn Classic (v1) and Berry (v2+) text formats.
+
+    Only names and resolved versions are read (the twin stays simpler than
+    the suite: no dependency edges, no dev-scope closure).
+    """
     deps: list[Dependency] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -803,13 +816,18 @@ def scan_yarn_lock(path: Path) -> list[Dependency]:
     for line in lines:
         if not line or line.startswith("#"):
             continue
-        # Entry header: "name@version:" or "name@version, name@version:"
-        entry_match = _YARN_ENTRY.match(line)
-        if entry_match and not line.startswith(" "):
-            current_name = entry_match.group(1)
+        if not line.startswith(" "):
+            # Entry header: classic "name@range, name@range:" (quoted or
+            # bare), berry "name@npm:range": — or __metadata / a local
+            # workspace entry, which name nothing third-party.
+            entry_match = _YARN_ENTRY.match(line)
+            if entry_match is None or any(p in line for p in _YARN_LOCAL_PROTOCOLS):
+                current_name = None
+            else:
+                current_name = entry_match.group(1)
             continue
-        # Version line under current entry
-        version_match = _YARN_VERSION.match(line)
+        # Version line under current entry (classic or berry spelling)
+        version_match = _YARN_VERSION.match(line) or _YARN_VERSION_BERRY.match(line)
         if version_match and current_name:
             version = version_match.group(1)
             key = f"{current_name}@{version}"
