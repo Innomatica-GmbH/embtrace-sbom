@@ -26,7 +26,20 @@ def parse(content: str) -> list[str]:
 
     for section in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
         section_deps = data.get(section, {})
-        if isinstance(section_deps, dict):
-            deps.update(section_deps.keys())
+        if not isinstance(section_deps, dict):
+            continue
+        for name, spec in section_deps.items():
+            # `workspace:`, `link:` and `portal:` point into the customer's
+            # OWN tree — not a third-party package. This is the regex
+            # fallback and has no file path, so it cannot tell a `file:`
+            # directory (own tree) from a vendored `file:...tgz` archive (a
+            # real component); it keeps both, and the structured parser,
+            # which wins the merge, makes the finer call. Without this the
+            # fallback would simply re-add what tier 2 just dropped.
+            if isinstance(spec, str) and spec.strip().startswith(
+                ("workspace:", "link:", "portal:")
+            ):
+                continue
+            deps.add(name)
 
     return sorted(deps)

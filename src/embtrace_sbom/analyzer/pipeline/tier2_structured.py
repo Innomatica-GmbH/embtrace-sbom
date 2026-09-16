@@ -339,6 +339,40 @@ class GradleCatalogParser:
 # package.json (npm/Node.js)
 # ---------------------------------------------------------------------------
 
+#: A dependency range that is not a range but a pointer into the customer's
+#: OWN tree. Measured on streamlit and vue-core (16.09.2026): seven resp.
+#: eleven of the project's own packages were listed as third-party
+#: components, with `workspace:^` standing where a version belongs.
+#: `file:` is deliberately NOT in this list — it points at a local path,
+#: and that path can just as well be a vendored THIRD-PARTY archive
+#: (`file:./vendor/foo-1.2.3.tgz`), which is exactly the kind of component
+#: that must not vanish. It is decided separately, by looking.
+_OWN_TREE_PROTOCOLS = ("workspace:", "link:", "portal:")
+
+
+def _is_own_tree(spec: str, manifest: Path) -> bool:
+    """True when *spec* points into the customer's own tree, not at a package.
+
+    ``file:`` is the ambiguous one: ``file:../shared-lib`` is a sibling
+    package in the same repository, ``file:./vendor/foo-1.2.3.tgz`` is a
+    third-party library vendored into the tree — a real component of the
+    product. A directory is the own tree; an archive, or anything that
+    cannot be resolved, stays in the bill (the cautious direction).
+    """
+    text = spec.strip()
+    if text.startswith(_OWN_TREE_PROTOCOLS):
+        return True
+    if not text.startswith("file:"):
+        return False
+    target = text[len("file:"):].strip()
+    if not target:
+        return False
+    try:
+        return (manifest.parent / target).resolve().is_dir()
+    except OSError:
+        return False
+
+
 class PackageJsonParser:
     """Parse package.json using json module."""
 
@@ -367,6 +401,7 @@ class PackageJsonParser:
             return ScanResult(tier=self.tier, scanner_name=self.name)
 
         deps: list[BuildFileDependency] = []
+        own_tree = 0
         dep_sections = (
             "dependencies", "devDependencies", "peerDependencies", "optionalDependencies",
         )
@@ -375,6 +410,10 @@ class PackageJsonParser:
             if not isinstance(section_deps, dict):
                 continue
             for name, version in section_deps.items():
+                # The customer's own tree is not a third-party component.
+                if isinstance(version, str) and _is_own_tree(version, file_path):
+                    own_tree += 1
+                    continue
                 deps.append(BuildFileDependency(
                     name=name,
                     version=str(version) if isinstance(version, str) else "",
@@ -387,6 +426,15 @@ class PackageJsonParser:
                     tier=self.tier,
                     detection_method="json-package",
                 ))
+
+        if own_tree:
+            # Countable: a filter whose effect cannot be seen is where the
+            # next rebuild quietly drops a little more.
+            logger.info(
+                "%s: %d Eintraege zeigen in den eigenen Baum "
+                "(workspace/link/portal/file-Verzeichnis) — keine Komponenten",
+                file_path, own_tree,
+            )
 
         return ScanResult(tier=self.tier, scanner_name=self.name, dependencies=deps)
 
