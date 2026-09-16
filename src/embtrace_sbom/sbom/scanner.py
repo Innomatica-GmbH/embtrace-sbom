@@ -221,6 +221,18 @@ def scan_conan_lock(path: Path) -> list[Dependency]:
         logger.warning("Failed to parse %s: %s", path, exc)
         return deps
 
+    if not isinstance(data, dict):
+        # A JSON file whose top level is not an object is not this manifest:
+        # measured on grpc (16.09.2026), examples/node/package.json holds a
+        # STRING ("these examples have moved"). json.loads succeeds, and the
+        # reader then crashed with AttributeError on data.get. Say it in the
+        # same words as a parse failure, so it is visible, and carry on.
+        logger.warning(
+            "Failed to parse %s: top level is %s, not an object",
+            path, type(data).__name__,
+        )
+        return deps
+
     # Conan 2.x lock format: {"requires": ["zlib/1.3.1#hash", ...]}
     for ref in data.get("requires", []):
         # Format: name/version#revision or name/version
@@ -474,6 +486,18 @@ def scan_pipfile_lock(path: Path) -> list[Dependency]:
         logger.warning("Failed to parse %s: %s", path, exc)
         return deps
 
+    if not isinstance(data, dict):
+        # A JSON file whose top level is not an object is not this manifest:
+        # measured on grpc (16.09.2026), examples/node/package.json holds a
+        # STRING ("these examples have moved"). json.loads succeeds, and the
+        # reader then crashed with AttributeError on data.get. Say it in the
+        # same words as a parse failure, so it is visible, and carry on.
+        logger.warning(
+            "Failed to parse %s: top level is %s, not an object",
+            path, type(data).__name__,
+        )
+        return deps
+
     for section in ("default", "develop"):
         for name, info in data.get(section, {}).items():
             version = info.get("version", "").lstrip("=")
@@ -496,6 +520,18 @@ def scan_vcpkg_json(path: Path) -> list[Dependency]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to parse %s: %s", path, exc)
+        return deps
+
+    if not isinstance(data, dict):
+        # A JSON file whose top level is not an object is not this manifest:
+        # measured on grpc (16.09.2026), examples/node/package.json holds a
+        # STRING ("these examples have moved"). json.loads succeeds, and the
+        # reader then crashed with AttributeError on data.get. Say it in the
+        # same words as a parse failure, so it is visible, and carry on.
+        logger.warning(
+            "Failed to parse %s: top level is %s, not an object",
+            path, type(data).__name__,
+        )
         return deps
 
     for entry in data.get("dependencies", []):
@@ -729,6 +765,18 @@ def scan_package_lock_json(path: Path) -> list[Dependency]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to parse %s: %s", path, exc)
+        return deps
+
+    if not isinstance(data, dict):
+        # A JSON file whose top level is not an object is not this manifest:
+        # measured on grpc (16.09.2026), examples/node/package.json holds a
+        # STRING ("these examples have moved"). json.loads succeeds, and the
+        # reader then crashed with AttributeError on data.get. Say it in the
+        # same words as a parse failure, so it is visible, and carry on.
+        logger.warning(
+            "Failed to parse %s: top level is %s, not an object",
+            path, type(data).__name__,
+        )
         return deps
 
     # v2/v3 format: "packages" dict with node_modules paths

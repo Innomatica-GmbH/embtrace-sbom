@@ -13,9 +13,12 @@ from typing import TYPE_CHECKING
 
 from embtrace_sbom.analyzer.models import BuildFileDependency
 from embtrace_sbom.analyzer.pipeline.base import ScanResult
+from embtrace_sbom.core.log import get_logger
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = get_logger(__name__)
 
 _TIER = 2
 _CONFIDENCE = 0.90
@@ -352,6 +355,15 @@ class PackageJsonParser:
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
+            return ScanResult(tier=self.tier, scanner_name=self.name)
+        if not isinstance(data, dict):
+            # Measured on grpc (16.09.2026): examples/node/package.json holds
+            # a STRING. json.loads succeeds and data.get then raised
+            # AttributeError.
+            logger.warning(
+                "Failed to parse %s: top level is %s, not an object",
+                file_path, type(data).__name__,
+            )
             return ScanResult(tier=self.tier, scanner_name=self.name)
 
         deps: list[BuildFileDependency] = []
