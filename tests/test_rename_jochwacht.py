@@ -183,12 +183,23 @@ class TestTheShippedTextCarriesTheNewName:
             offending.append(para)
         assert not offending, offending
 
-    def test_the_shared_config_names_are_still_the_ones_the_suite_reads(self) -> None:
-        # The reason the names above are exempt — if this ever stops being
-        # true, the exemption has to be revisited rather than inherited.
-        from jochwacht_sbom.sbom.scanner import IGNORE_FILENAME
+    def test_both_spellings_of_the_shared_config_names_are_honoured(self) -> None:
+        """Since 01.10.2026 the new name is preferred and the old one still read.
 
-        assert IGNORE_FILENAME == ".embtraceignore"
+        The exemption above is no longer "we keep the old name"; it is "both
+        names work, and prose may still mention the old one". If that ever
+        stops being true, the exemption has to be revisited rather than
+        inherited.
+        """
+        from jochwacht_sbom import filenames
+        from jochwacht_sbom.sbom.scanner import _SCANNERS, IGNORE_FILENAME
+
+        assert IGNORE_FILENAME == ".jochwachtignore"
+        assert filenames.both(IGNORE_FILENAME) == (
+            ".jochwachtignore", ".embtraceignore",
+        )
+        for spelling in ("jochwacht-deps.yaml", "embtrace-deps.yaml"):
+            assert spelling in _SCANNERS, spelling
 
 
 class TestTheOldImportsStillResolve:

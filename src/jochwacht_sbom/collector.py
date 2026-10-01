@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from jochwacht_sbom import filenames as file_names
 from jochwacht_sbom.analyzer.normalize import normalize_dep_name
 from jochwacht_sbom.analyzer.pipeline import run_pipeline
 from jochwacht_sbom.analyzer.scanner import _apply_cmake_conditions, collect_build_files
@@ -52,10 +53,11 @@ _NAME_ONLY_ECOSYSTEMS = frozenset({
 
 def _project_name(path: Path) -> str:
     """Project identity for the self-reference filter (Befund 75): the name in
-    embtrace.yaml if the tree carries one, else the directory name — the same
-    precedence the suite uses, so both tools agree on what "self" is."""
-    cfg = path / "embtrace.yaml"
-    if cfg.is_file():
+    jochwacht.yaml (or the older embtrace.yaml) if the tree carries one, else
+    the directory name — the same precedence the suite uses, so both tools
+    agree on what "self" is."""
+    cfg = file_names.find(path, file_names.CONFIG)
+    if cfg is not None:
         try:
             import yaml
             data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}

@@ -25,7 +25,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from jochwacht_sbom import __version__
+from jochwacht_sbom import __version__, properties
 from jochwacht_sbom.core.exceptions import JochwachtError
 
 if TYPE_CHECKING:
@@ -59,11 +59,11 @@ def _component(comp: CheckComponent) -> dict[str, object]:
 
     props: list[dict[str, str]] = []
     if comp.condition:
-        props.append({"name": "embtrace:condition", "value": comp.condition})
+        props.append({"name": properties.name("condition"), "value": comp.condition})
     if comp.ecosystem:
-        props.append({"name": "embtrace:ecosystem", "value": comp.ecosystem})
+        props.append({"name": properties.name("ecosystem"), "value": comp.ecosystem})
     if comp.source_type:
-        props.append({"name": "embtrace:detected-by", "value": comp.source_type})
+        props.append({"name": properties.name("detected-by"), "value": comp.source_type})
     if props:
         out["properties"] = props
     return out

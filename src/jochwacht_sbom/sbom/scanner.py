@@ -38,6 +38,7 @@ from urllib.parse import quote
 import yaml
 from pydantic import BaseModel
 
+from jochwacht_sbom import filenames as file_names
 from jochwacht_sbom.core.log import get_logger
 from jochwacht_sbom.diagnosis import record_failure
 from jochwacht_sbom.sbom.cmake_conditions import (
@@ -90,7 +91,7 @@ class Dependency(BaseModel):
     #: The DECLARED range when no resolved version exists ("^4.18.0",
     #: "~6.5.2", ">=2.0"). A range is a wish, not a version — it never
     #: goes into the CycloneDX version field (Befund 30); the generator
-    #: emits it as the property ``embtrace:declared-range`` instead.
+    #: emits it as the property ``jochwacht:declared-range`` instead.
     declared_range: str = ""
     license: str | None = None
     supplier: str | None = None
@@ -1610,7 +1611,9 @@ _SCANNERS: dict[str, tuple[str, type[object] | None]] = {
     "Pipfile.lock": ("pipfile_lock", None),
     "vcpkg.json": ("vcpkg_json", None),
     "CMakeLists.txt": ("cmake", None),
-    "embtrace-deps.yaml": ("embtrace_deps", None),
+    # beide Schreibweisen — die Suite ist eine eigene Freigabelinie
+    file_names.DEPS: ("embtrace_deps", None),
+    file_names.LEGACY_DEPS: ("embtrace_deps", None),
     "west.yml": ("west_manifest", None),
     "Cargo.lock": ("cargo_lock", None),
     "package-lock.json": ("package_lock_json", None),
@@ -1808,13 +1811,19 @@ DEFAULT_EXCLUDE_DIRS: frozenset[str] = frozenset({
 #: Project-local ignore file — one glob pattern per line, ``#`` comments.
 #: Patterns match directory names and paths relative to the scan root
 #: (e.g. ``staging``, ``firmware/generated``, ``*.bak``).
-IGNORE_FILENAME = ".embtraceignore"
+IGNORE_FILENAME = file_names.IGNORE
 
 
 def load_ignore_patterns(root: Path) -> list[str]:
-    """Read ``.embtraceignore`` at *root* (empty list when absent)."""
-    ignore_file = root / IGNORE_FILENAME
-    if not ignore_file.is_file():
+    """Read ``.jochwachtignore`` at *root* (empty list when absent).
+
+    Falls back to the pre-rename ``.embtraceignore``; the new spelling wins
+    when both exist. Reading only the new name would quietly stop honouring
+    an exclusion file the customer already has — the scan would get larger
+    and nothing would say why.
+    """
+    ignore_file = file_names.find(root, IGNORE_FILENAME)
+    if ignore_file is None:
         return []
     try:
         lines = ignore_file.read_text(encoding="utf-8").splitlines()
