@@ -1,7 +1,7 @@
-"""embtrace-check has moved to embtrace-sbom — this package forwards to it.
+"""embtrace-check has moved to jochwacht-sbom — this package forwards to it.
 
 ``import embtrace_check.<module>`` resolves to the very same module object as
-``embtrace_sbom.<module>`` (a meta-path finder aliases the namespace), so
+``jochwacht_sbom.<module>`` (a meta-path finder aliases the namespace), so
 existing scripts and the embtrace suite's collector check keep working.
 """
 
@@ -13,22 +13,22 @@ import importlib.machinery
 import sys
 from types import ModuleType
 
-import embtrace_sbom
+import jochwacht_sbom
 
-__version__ = embtrace_sbom.__version__
+__version__ = jochwacht_sbom.__version__
 
 _PREFIX = __name__ + "."
 
 
 class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    """``embtrace_check.X`` → the already-imported ``embtrace_sbom.X``."""
+    """``embtrace_check.X`` → the already-imported ``jochwacht_sbom.X``."""
 
     def find_spec(
         self, fullname: str, path: object = None, target: object = None,
     ) -> importlib.machinery.ModuleSpec | None:
         if not fullname.startswith(_PREFIX):
             return None
-        real = "embtrace_sbom." + fullname[len(_PREFIX):]
+        real = "jochwacht_sbom." + fullname[len(_PREFIX):]
         try:
             module = importlib.import_module(real)
         except ModuleNotFoundError:
@@ -57,6 +57,6 @@ def __getattr__(name: str) -> object:
 
 
 def main() -> None:
-    from embtrace_sbom.cli import main_check_alias
+    from jochwacht_sbom.cli import main_check_alias
 
     main_check_alias()

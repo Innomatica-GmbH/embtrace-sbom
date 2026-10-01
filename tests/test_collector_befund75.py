@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from embtrace_sbom.collector import _project_name, collect_components
+from jochwacht_sbom.collector import _project_name, collect_components
 
 
 def _write(tree: Path, rel: str, text: str) -> None:

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from embtrace_sbom.cli import main
+from jochwacht_sbom.cli import main
 
 
 def _project(tmp_path: Path) -> Path:
@@ -27,7 +27,7 @@ def _project(tmp_path: Path) -> Path:
 
 
 def _tty_run(args: list[str]):  # noqa: ANN202 — click Result
-    with patch("embtrace_sbom.cli.upload_payload") as up, \
+    with patch("jochwacht_sbom.cli.upload_payload") as up, \
          patch("sys.stdin.isatty", return_value=True), \
          patch("sys.stdout.isatty", return_value=True):
         res = CliRunner().invoke(main, args)
@@ -48,12 +48,12 @@ class TestNoQuestion:
         # one line, even with a long project path (CI tmp paths are long)
         report_lines = [ln for ln in res.output.splitlines() if "Free CRA readiness report" in ln]
         assert len(report_lines) == 1, res.output
-        assert report_lines[0].endswith(f"embtrace-sbom {proj} --send --email you@example.com")
+        assert report_lines[0].endswith(f"jochwacht-sbom {proj} --send --email you@example.com")
         assert "privacy" not in res.output.lower()      # the link belongs to --send
 
     def test_without_a_tty_the_same_text(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_sbom.cli.upload_payload"):
+        with patch("jochwacht_sbom.cli.upload_payload"):
             res = CliRunner().invoke(main, [str(proj)])
         assert res.exit_code == 0
         assert "Wrote sbom.cdx.json (1 component)." in res.output
@@ -61,14 +61,14 @@ class TestNoQuestion:
 
     def test_send_path_keeps_preview_privacy_and_confirmation(self, tmp_path: Path) -> None:
         proj = _project(tmp_path)
-        with patch("embtrace_sbom.cli.upload_payload") as up:
+        with patch("jochwacht_sbom.cli.upload_payload") as up:
             res = CliRunner().invoke(
                 main, [str(proj), "--send", "--email", "a@b.de"], input="n\n",
             )
         assert res.exit_code == 0, res.output
         up.assert_not_called()
         assert "This would be sent" in res.output
-        assert "embtrace.dev/check-privacy" in res.output
+        assert "jochwacht.dev/check-privacy" in res.output
         assert "Nothing was sent" in res.output
 
 

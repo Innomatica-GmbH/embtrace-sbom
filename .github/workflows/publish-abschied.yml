@@ -1,0 +1,40 @@
+name: publish-abschied
+# The final release of each old distribution name. Both are forwarding
+# shells: they install jochwacht-sbom, keep the old command working and say
+# once that the name changed. Published by their own tags so a routine
+# release can never push them again — PyPI refuses a re-upload of a version
+# that exists, and these are meant to be published exactly once.
+#   embtrace-sbom-v*   -> shim/embtrace-sbom
+#   embtrace-check-v*  -> shim/embtrace-check
+on:
+  push:
+    tags: ["embtrace-sbom-v*", "embtrace-check-v*"]
+  workflow_dispatch:
+    inputs:
+      which:
+        description: "shim/embtrace-sbom or shim/embtrace-check"
+        required: true
+        type: choice
+        options: [shim/embtrace-sbom, shim/embtrace-check]
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions: { id-token: write }   # PyPI Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: pick the directory from the tag (or the dispatch input)
+        id: pick
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            embtrace-sbom-v*)  DIR=shim/embtrace-sbom ;;
+            embtrace-check-v*) DIR=shim/embtrace-check ;;
+            *)                 DIR="${{ inputs.which }}" ;;
+          esac
+          test -n "$DIR" && test -d "$DIR"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+      - run: pip install build && python -m build "${{ steps.pick.outputs.dir }}"
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: { packages-dir: "${{ steps.pick.outputs.dir }}/dist" }

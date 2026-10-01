@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from embtrace_sbom.sbom.scanner import scan_directory, scan_uv_lock
+from jochwacht_sbom.sbom.scanner import scan_directory, scan_uv_lock
 
 UV_LOCK = """
 version = 1

@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from embtrace_sbom.analyzer.normalize import normalize_dep_name
-from embtrace_sbom.collector import collect_components
+from jochwacht_sbom.analyzer.normalize import normalize_dep_name
+from jochwacht_sbom.collector import collect_components
 
 
 def test_the_normalizer_really_does_collapse_these_names() -> None:

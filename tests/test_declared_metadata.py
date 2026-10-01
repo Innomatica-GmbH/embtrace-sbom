@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from embtrace_sbom.collector import collect_components
-from embtrace_sbom.sbom.scanner import scan_embtrace_deps
+from jochwacht_sbom.collector import collect_components
+from jochwacht_sbom.sbom.scanner import scan_embtrace_deps
 
 if TYPE_CHECKING:
     from pathlib import Path

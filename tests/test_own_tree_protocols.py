@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from embtrace_sbom.analyzer.parsers import npm as npm_parser
-from embtrace_sbom.analyzer.pipeline.tier2_structured import PackageJsonParser
+from jochwacht_sbom.analyzer.parsers import npm as npm_parser
+from jochwacht_sbom.analyzer.pipeline.tier2_structured import PackageJsonParser
 
 
 def _manifest(tmp_path: Path, deps: dict[str, str]) -> Path:

@@ -1,7 +1,7 @@
 [project]
 name = "embtrace-check"
-version = "0.9.0"
-description = "embtrace-check has moved: it is now embtrace-sbom (same tool, new name). This package installs embtrace-sbom and keeps the embtrace-check command working."
+version = "0.12.0"
+description = "embtrace-check is now jochwacht-sbom (same tool, new name). This package installs jochwacht-sbom and keeps the embtrace-check command working. Final release under the old name."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -10,11 +10,11 @@ classifiers = [
     "Development Status :: 7 - Inactive",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 ]
-dependencies = ["embtrace-sbom>=0.9.0"]
+dependencies = ["jochwacht-sbom>=0.12.0"]
 
 [project.urls]
-Homepage = "https://embtrace.dev/check"
-Source = "https://github.com/Innomatica-GmbH/embtrace-sbom"
+Homepage = "https://jochwacht.dev/check"
+Source = "https://github.com/Innomatica-GmbH/jochwacht-sbom"
 
 [project.scripts]
 embtrace-check = "embtrace_check:main"

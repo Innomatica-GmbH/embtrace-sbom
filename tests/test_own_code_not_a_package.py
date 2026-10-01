@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from embtrace_sbom.analyzer.parsers import python as pyparse
-from embtrace_sbom.analyzer.pipeline.tier2_structured import CargoTomlParser
+from jochwacht_sbom.analyzer.parsers import python as pyparse
+from jochwacht_sbom.analyzer.pipeline.tier2_structured import CargoTomlParser
 
 
 class TestWorkspaceCrates:

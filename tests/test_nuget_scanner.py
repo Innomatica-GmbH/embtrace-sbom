@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from embtrace_sbom.sbom.scanner import (
+from jochwacht_sbom.sbom.scanner import (
     _SCANNERS,
     Dependency,
     nuget_version_fields,

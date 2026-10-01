@@ -1,23 +1,24 @@
-# embtrace-sbom
+# jochwacht-sbom
 
-> **Formerly embtrace-check.** Same tool, same code line, new name — and, from
-> 0.9.0 on, GPL-3.0-or-later. `pipx install embtrace-sbom`; the `embtrace-check`
-> command keeps working with a one-line notice, and the old package installs
-> this one. Releases up to embtrace-check 0.8.6 stay MIT.
+> **Formerly embtrace-check, then embtrace-sbom.** Same tool, same code line,
+> new name — the old one collided with a registered trademark. From 0.9.0 on,
+> GPL-3.0-or-later. `pipx install jochwacht-sbom`; the `embtrace-check` and
+> `embtrace-sbom` commands keep working with a one-line notice, and both old
+> packages install this one. Releases up to embtrace-check 0.8.6 stay MIT.
 
 **Reads your build, writes your bill of materials — locally.** One command in
 your project folder produces a CycloneDX SBOM, including from **configured
 builds** (`CMakeCache.txt`) and **Yocto/Buildroot build output** that generic
 scanners cannot read. Send it explicitly if you want the free CRA readiness
 report — traffic-light status against the
-[EU Cyber Resilience Act](https://embtrace.dev/en/cra-nis2-guide.html), your
+[EU Cyber Resilience Act](https://jochwacht.dev/en/cra-nis2-guide.html), your
 component inventory, known vulnerabilities with severity.
 
 ## SBOM generation for embedded builds
 
 Most SBOM tools catalog package registries — npm, PyPI, Go, Cargo. Embedded software
 is built differently: CMake, Make, Meson and Autotools source trees, Yocto images,
-Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-sbom reads.
+Buildroot, Zephyr modules, vcpkg manifests. That is what jochwacht-sbom reads.
 
 **What you get:**
 
@@ -32,7 +33,7 @@ Buildroot, Zephyr modules, vcpkg manifests. That is what embtrace-sbom reads.
   as product components. Conditional dependencies are marked **optional** instead
   of being guessed into the product.
 - **Nothing leaves your machine by default.** The standard run writes `sbom.cdx.json`
-  next to your project and transmits nothing. Sending it to embtrace for a free CRA
+  next to your project and transmits nothing. Sending it to Jochwacht for a free CRA
   readiness report is a separate, explicit step — the tool shows you the full list
   and asks before anything is transmitted.
 
@@ -42,16 +43,16 @@ zero product components for these builds. For registry ecosystems (npm, PyPI, Go
 generic scanners work well — embedded builds are the gap this tool exists for.
 
 ```
-pipx install embtrace-sbom
-embtrace-sbom .         # writes sbom.cdx.json, sends nothing
+pipx install jochwacht-sbom
+jochwacht-sbom .         # writes sbom.cdx.json, sends nothing
 ```
 
 ## Quickstart
 
 ```bash
-pipx install embtrace-sbom          # or: pip install embtrace-sbom,
+pipx install jochwacht-sbom          # or: pip install jochwacht-sbom,
                                     #     or download the standalone binary
-embtrace-sbom .                     # reads your build, writes sbom.cdx.json
+jochwacht-sbom .                     # reads your build, writes sbom.cdx.json
                                     # — and transmits NOTHING
 ```
 
@@ -61,7 +62,7 @@ silently overwritten.
 **Free CRA readiness report** (optional): send the bill explicitly —
 
 ```bash
-embtrace-sbom . --send --email you@example.com
+jochwacht-sbom . --send --email you@example.com
 ```
 
 You are shown exactly what would leave the house (names and versions, no
@@ -69,7 +70,7 @@ paths, no code) and asked to confirm; `--yes` skips the question in scripts.
 No code is required. The report arrives within 24 hours. You can also simply
 e-mail your `sbom.cdx.json` to check@innomatica.de.
 
-More options: `embtrace-sbom --help` — including `--sbom PATH` (write the
+More options: `jochwacht-sbom --help` — including `--sbom PATH` (write the
 SBOM elsewhere), `--output payload.json` for air-gapped environments (send the
 file by mail) and `--with-tools` to additionally use native package-manager
 CLIs for higher-fidelity results.
@@ -112,7 +113,7 @@ deliberately **not** transmitted — a supplier you declare yourself in
 See for yourself before sending anything:
 
 ```bash
-embtrace-sbom . --dry-run      # prints the exact payload, uploads nothing
+jochwacht-sbom . --dry-run      # prints the exact payload, uploads nothing
 ```
 
 Build outputs (`dist/`, `build/`, `node_modules/`, …) and hidden
@@ -135,26 +136,26 @@ your machine.
 
 ## When the tool fails: the diagnosis file
 
-A defect in embtrace-sbom must not be a silent gap in your bill, and it
+A defect in jochwacht-sbom must not be a silent gap in your bill, and it
 must not phone home either. When a reader crashes (or the tool crashes
 elsewhere), the run
 
 - continues with the other readers and still writes the SBOM,
 - says in red which reader failed (`pom.xml (KeyError)`), that the bill is
   **incomplete**, and that this is a defect in the tool, not in your project,
-- writes `embtrace-sbom-diagnosis.json` next to the SBOM, names the path,
+- writes `jochwacht-sbom-diagnosis.json` next to the SBOM, names the path,
   and asks you to mail it to <support@innomatica.de>,
 - ends with exit code 1.
 
 Nothing is sent automatically — the file leaves your machine only if you
 send it. Open it first. It contains: tool version, Python version, operating
 system, which reader failed, the exception *type*, the call chain inside
-embtrace-sbom, and the file *pattern* the reader was called for (a name from
+jochwacht-sbom, and the file *pattern* the reader was called for (a name from
 the tool's own tables, e.g. `pom.xml` or `*.csproj`). It never contains
 package names, versions, licenses, file paths, file contents, environment
 variables, host names — or the exception message (a `KeyError`'s message is
 a key, and a key is often a package name). The boundary is one function,
-`own_frames()` in `src/embtrace_sbom/diagnosis.py`, and `tests/test_diagnosis.py`
+`own_frames()` in `src/jochwacht_sbom/diagnosis.py`, and `tests/test_diagnosis.py`
 runs a fabricated crash against canary data to prove nothing gets through.
 
 A build system the tool does not read yet is **not** a defect: if nothing
@@ -164,7 +165,8 @@ exit code 2, names the markers by label and count (`bazel (2), keil (1)`),
 and writes the same file with `"kind": "unsupported_build"` — labels and
 counts only, no file names. Next to a build system it does read, an unread
 one is named in a dim line and no file is written. Developers who want the
-plain traceback set `EMBTRACE_SBOM_TRACEBACK=1`.
+plain traceback set `JOCHWACHT_SBOM_TRACEBACK=1` (the pre-rename
+`EMBTRACE_SBOM_TRACEBACK` is still read, so existing setups keep working).
 
 ## Exit codes
 
@@ -177,13 +179,13 @@ plain traceback set `EMBTRACE_SBOM_TRACEBACK=1`.
 ## Privacy
 
 Data is processed exclusively on Innomatica's own servers in Germany and is
-never shared or sold. Full notes: <https://embtrace.dev/check-privacy>.
+never shared or sold. Full notes: <https://jochwacht.dev/check-privacy>.
 
 ## About
 
-`embtrace-sbom` is the free entry point to
-[embtrace](https://embtrace.dev) — the CRA/NIS2 compliance toolchain for
-embedded software teams by [Innomatica GmbH](https://embtrace.dev/impressum.html).
+`jochwacht-sbom` is the free entry point to
+[Jochwacht](https://jochwacht.dev) — the CRA/NIS2 compliance toolchain for
+embedded software teams by [Innomatica GmbH](https://jochwacht.dev/impressum.html).
 The server side (enrichment, vulnerability monitoring, reports) is a
 commercial product; this repository contains the complete client.
 

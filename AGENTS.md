@@ -1,4 +1,4 @@
-# AGENTS.md — embtrace-sbom (the public twin of the embtrace suite)
+# AGENTS.md — jochwacht-sbom (the public twin of the Jochwacht suite)
 
 Rules for any agent or person working in this repository. They come from the
 owner's decisions (Innomatica GmbH, Ivan Maradzhiyski) and are not up for
@@ -6,8 +6,8 @@ reinterpretation here.
 
 ## What this repository is
 
-`embtrace-sbom` (formerly `embtrace-check`) is the open-source collector of
-the embtrace CRA suite: it reads a build and writes a CycloneDX SBOM locally,
+`jochwacht-sbom` (formerly `embtrace-check`, then `embtrace-sbom`) is the
+open-source collector of the Jochwacht CRA suite: it reads a build and writes a CycloneDX SBOM locally,
 and — only on the user's explicit decision — sends dependency metadata for a
 free CRA readiness report. It is published so that anyone can verify what
 leaves their machine.
@@ -37,9 +37,21 @@ leaves their machine.
   run `pytest -q` before pushing; the `tests` workflow runs both on 3.11 and
   3.12 and fails fast.
 - Releases: tag `vX.Y.Z` → the `publish` workflow builds and publishes
-  `embtrace-sbom` (PyPI, Trusted Publishing), the forwarding shell
-  `embtrace-check` (`shim/`), and the Linux binary. A release needs
-  `.github/release-notes/vX.Y.Z.md`.
+  `jochwacht-sbom` (PyPI, Trusted Publishing) and the Linux binary. A
+  release needs `.github/release-notes/vX.Y.Z.md`.
+- The old distribution names are frozen, each with its own tag so a routine
+  release can never push them again: `embtrace-sbom-v*` and
+  `embtrace-check-v*` publish the forwarding shells in `shim/`
+  (`publish-abschied`), `jochwacht-placeholder-v*` and
+  `embtrace-placeholder-v*` the name reservations (`publish-placeholder`).
+  Each is meant to be published exactly once; PyPI refuses a re-upload.
+- Names the customer writes are NOT renamed here: `.embtraceignore`,
+  `embtrace-deps.yaml` and `embtrace.yaml` are read by the suite under the
+  same spelling, and the suite keeps its name for now. Renaming them in
+  this repository alone would mean one tool honours the file and the other
+  does not. They change when the suite changes.
+- Environment variables are `JOCHWACHT_*`; the pre-rename `EMBTRACE_*`
+  spelling is still read (`jochwacht_sbom/env.py`, one mechanical rule).
 - **No AI co-author trailers in commits of this public repository.**
 - Metadata only: fixtures and tests reference package names and versions;
   nothing here installs or executes third-party packages by design.

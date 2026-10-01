@@ -3,7 +3,7 @@
 Three things are pinned here, each with a fabricated failure:
 
 1. A crashed reader is a defect of the tool: the run continues with the other
-   readers, says so in red, writes ``embtrace-sbom-diagnosis.json`` next to
+   readers, says so in red, writes ``jochwacht-sbom-diagnosis.json`` next to
    the SBOM and ends with exit 1. A crash outside a reader does the same.
 2. The boundary — the file contains nothing the customer would not show a
    stranger: no package names, versions, paths, file contents, environment
@@ -24,11 +24,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from embtrace_sbom import cli as check_cli
-from embtrace_sbom import diagnosis
-from embtrace_sbom.analyzer.pipeline import run_pipeline, tier2_structured
-from embtrace_sbom.analyzer.scanner import collect_build_files
-from embtrace_sbom.sbom import scanner as sbom_scanner
+from jochwacht_sbom import cli as check_cli
+from jochwacht_sbom import diagnosis
+from jochwacht_sbom.analyzer.pipeline import run_pipeline, tier2_structured
+from jochwacht_sbom.analyzer.scanner import collect_build_files
+from jochwacht_sbom.sbom import scanner as sbom_scanner
 
 # Fabricated customer data: none of these strings may ever reach the file.
 _SECRET_DIR = "acme-secret-project-x9"
@@ -343,7 +343,7 @@ class TestUnsupportedBuild:
     def test_every_marker_is_unread_by_the_scanner_tables(self) -> None:
         # A label in UNSUPPORTED_MARKERS must not name a file the tool reads
         # — otherwise "no reader yet" would be a lie.
-        from embtrace_sbom.analyzer.scanner import BUILD_FILE_PATTERNS
+        from jochwacht_sbom.analyzer.scanner import BUILD_FILE_PATTERNS
 
         read_names = set(sbom_scanner._SCANNERS) | {
             Path(p).name for p, _ in BUILD_FILE_PATTERNS

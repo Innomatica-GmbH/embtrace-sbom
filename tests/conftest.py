@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from embtrace_sbom import diagnosis
+from jochwacht_sbom import diagnosis
 
 
 @pytest.fixture(autouse=True)

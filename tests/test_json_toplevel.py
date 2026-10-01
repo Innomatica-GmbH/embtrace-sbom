@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from embtrace_sbom.analyzer.pipeline.tier2_structured import PackageJsonParser
-from embtrace_sbom.sbom.scanner import (
+from jochwacht_sbom.analyzer.pipeline.tier2_structured import PackageJsonParser
+from jochwacht_sbom.sbom.scanner import (
     scan_conan_lock,
     scan_package_lock_json,
     scan_pipfile_lock,
