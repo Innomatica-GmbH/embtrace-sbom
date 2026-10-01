@@ -43,7 +43,7 @@ _stdout = Console(soft_wrap=True)
 @click.option(
     "--send",
     is_flag=True,
-    help="Send the bill of materials to embtrace for a free CRA readiness "
+    help="Send the bill of materials to Jochwacht for a free CRA readiness "
     "report (needs --email; asks for confirmation first, shows exactly what "
     "leaves the house). Without this flag NOTHING is transmitted. "
     "Privacy: https://jochwacht.dev/check-privacy",

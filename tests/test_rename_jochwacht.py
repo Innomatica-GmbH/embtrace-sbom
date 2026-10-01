@@ -205,3 +205,40 @@ class TestTheOldImportsStillResolve:
         assert len(subclasses) > 5, len(subclasses)
         for cls in subclasses:
             assert issubclass(cls, exceptions.EmbtraceError), cls.__name__
+
+
+class TestWhatTheUserReadsOnScreen:
+    """The help text, not just the README.
+
+    Found the hard way on 01.10.2026: 0.12.0 shipped with
+    ``--send  Send the bill of materials to embtrace …`` because the guard
+    above reads README.md and nothing else. A customer meets the help text
+    far more often than the README, and it named the brand we had just
+    stopped using. The check now reads the strings the CLI prints.
+    """
+
+    def _help(self) -> str:
+        from click.testing import CliRunner
+
+        from jochwacht_sbom.cli import main
+
+        res = CliRunner().invoke(main, ["--help"])
+        assert res.exit_code == 0, res.output
+        return res.output
+
+    def test_the_help_text_names_the_product_by_its_new_name(self) -> None:
+        text = self._help()
+        rest = text
+        for name in TestTheShippedTextCarriesTheNewName.CONFIG_NAMES_SHARED_WITH_THE_SUITE:
+            rest = rest.replace(name, "")
+        # What is left may mention the old name only where it says it moved.
+        offending = [
+            line for line in rest.splitlines()
+            if "embtrace" in line.lower()
+            and not any(w in line.lower() for w in ("former", "now jochwacht", "renamed"))
+        ]
+        assert not offending, offending
+
+    def test_the_privacy_link_points_at_the_new_domain(self) -> None:
+        assert "jochwacht.dev/check-privacy" in self._help()
+        assert "embtrace.dev" not in self._help()
