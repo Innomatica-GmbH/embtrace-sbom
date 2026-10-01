@@ -154,9 +154,13 @@ class TestTheShippedTextCarriesTheNewName:
         "former", "was called", "renamed", "now jochwacht", "trademark",
         # Licence history: the releases made under the old name keep it.
         "releases up to", "were published under",
-        # The compatibility promise itself has to name what it promises.
+        # The compatibility promise itself has to name what it promises,
+        # and so does the migration section — telling somebody to uninstall
+        # the old package requires saying the old package's name.
         "commands keep working", "packages install this one",
-        "is still read",
+        "is still read", "are still read",
+        "old installations are redundant", "pipx uninstall",
+        "keeps the old command working", "still recognised as yours",
     )
 
     def test_the_old_name_appears_only_where_it_says_it_changed(self) -> None:

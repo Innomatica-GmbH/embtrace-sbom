@@ -6,6 +6,26 @@
 > `embtrace-sbom` commands keep working with a one-line notice, and both old
 > packages install this one. Releases up to embtrace-check 0.8.6 stay MIT.
 
+### If you already had the old package
+
+One package now provides all three commands, so the old installations are
+redundant — and `pipx` will not replace a command another installation
+already owns ("File exists at …/embtrace-sbom … Not modifying"):
+
+```bash
+pipx uninstall embtrace-sbom      # if you have it
+pipx uninstall embtrace-check     # if you have it
+pipx install --force jochwacht-sbom
+```
+
+With `pip`, `pip install -U embtrace-sbom` is enough: it installs
+`jochwacht-sbom` and keeps the old command working.
+
+Nothing else needs touching. Your scripts keep running, `import
+embtrace_sbom.…` resolves to the new modules, `except EmbtraceError` catches
+the same class, `EMBTRACE_*` environment variables are still read, and a
+bill written by any earlier release is still recognised as yours.
+
 **Reads your build, writes your bill of materials — locally.** One command in
 your project folder produces a CycloneDX SBOM, including from **configured
 builds** (`CMakeCache.txt`) and **Yocto/Buildroot build output** that generic
