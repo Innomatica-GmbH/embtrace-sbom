@@ -536,7 +536,7 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
     if not assume_yes:
         _print_leaving_summary(payload)
         console.print(f"[dim]Privacy: {_PRIVACY_URL}[/dim]")
-        if not click.confirm("Send this to embtrace?", default=True):
+        if not click.confirm("Send this to Jochwacht?", default=True):
             console.print("[yellow]Nothing was sent.[/yellow]")
             _print_default_ending(written, len(components), path_arg, updated=updated)
             return

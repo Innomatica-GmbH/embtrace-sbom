@@ -242,3 +242,39 @@ class TestWhatTheUserReadsOnScreen:
     def test_the_privacy_link_points_at_the_new_domain(self) -> None:
         assert "jochwacht.dev/check-privacy" in self._help()
         assert "embtrace.dev" not in self._help()
+
+    def test_no_string_the_cli_can_print_names_the_old_product(self) -> None:
+        """Every literal, not just the ones --help happens to show.
+
+        0.12.1 still asked "Send this to embtrace?" right before the data
+        leaves the house — the most consequential sentence in the tool, and
+        the help-text check could not see it because it is a prompt. Reading
+        the source catches prompts, errors and hints alike.
+        """
+        import re
+        from pathlib import Path as _Path
+
+        from jochwacht_sbom import cli as cli_mod
+
+        allowed = (
+            *TestTheShippedTextCarriesTheNewName.CONFIG_NAMES_SHARED_WITH_THE_SUITE,
+            # the two aliases must name themselves to say they moved
+            '_moved_notice("embtrace-check")',
+            '_moved_notice("embtrace-sbom")',
+        )
+        offending = []
+        src = _Path(cli_mod.__file__).read_text(encoding="utf-8")
+        for number, line in enumerate(src.splitlines(), start=1):
+            rest = line
+            for name in allowed:
+                rest = rest.replace(name, "")
+            if "embtrace" not in rest.lower():
+                continue
+            if re.match(r"\s*(from|import)\s+", rest):
+                continue
+            if re.match(r"\s*#", rest):      # comments explain, they do not print
+                continue
+            if re.match(r'\s*"""', rest):    # docstrings likewise
+                continue
+            offending.append(f"{number}: {line.strip()}")
+        assert not offending, offending
