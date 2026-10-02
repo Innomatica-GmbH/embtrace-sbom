@@ -11,6 +11,8 @@ This test is that criterion, encoded.
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -24,8 +26,14 @@ _NOT_OURS = {
 
 _TEXT = {
     ".py", ".md", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".json",
-    ".txt", ".sh", ".spec", ".html", ".js",
+    ".txt", ".sh", ".spec", ".html", ".js", ".svg", ".xml", ".css",
+    ".csv", ".rst",
 }
+
+#: Markup, in dem ein Wort ueber Tag-Grenzen hinweg geschrieben sein kann.
+_MARKUP = {".svg", ".html", ".xml", ".md"}
+
+_TAG = re.compile(r"<[^>]*>")
 
 #: This file names the old spellings in order to forbid them.
 _ALLOWED_TO_NAME_IT = {Path(__file__).resolve()}
@@ -64,3 +72,45 @@ def test_the_search_would_actually_find_something() -> None:
     assert len(files) > 40, len(files)
     assert any(p.suffix == ".py" for p in files)
     assert any(p.suffix == ".md" for p in files)
+
+
+def _visible_text(markup: str) -> str:
+    """What a reader sees: tags removed, whitespace collapsed.
+
+    Measured in the suite on 02.10.2026: its logo files drew the old name
+    as ``<tspan>emb</tspan><tspan>trace</tspan>``. A line-wise search over
+    the raw markup cannot see that word. The collector has no markup today,
+    so this guard is a watch kept, not a fix — and the self-check below
+    makes sure it is not a guard that reads nothing.
+    """
+    return re.sub(r"\s+", "", _TAG.sub(" ", markup)).lower()
+
+
+def test_no_markup_draws_the_old_name_across_tags() -> None:
+    hits: list[str] = []
+    for path in _shipped_files():
+        if path.suffix.lower() not in _MARKUP:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):  # pragma: no cover - binary
+            continue
+        if "embtrace" in _visible_text(text):
+            hits.append(str(path.relative_to(_REPO)))
+    assert not hits, hits
+
+
+def test_the_tag_stripper_sees_a_split_word() -> None:
+    geteilt = '<text><tspan fill="#1e3a8a">emb</tspan><tspan>trace</tspan></text>'
+    assert "embtrace" in _visible_text(geteilt)
+    assert "embtrace" not in _visible_text("<p>Joch</p><p>wacht</p>")
+
+
+def test_no_tracked_path_carries_the_old_name() -> None:
+    """A file called ``embtrace-shim.sh`` is a hit even with clean content."""
+    out = subprocess.run(
+        ["git", "-C", str(_REPO), "ls-files", "-z"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split("\0")
+    hits = [rel for rel in out if rel and "embtrace" in rel.lower()]
+    assert not hits, hits
