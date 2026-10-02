@@ -2,7 +2,7 @@
 
 The payload deliberately carries dependency *metadata only*: component names,
 versions and ecosystems — plus, for components you declared yourself in
-``embtrace-deps.yaml``, the supplier/license/purl/cpe you wrote there (the
+``jochwacht-deps.yaml``, the supplier/license/purl/cpe you wrote there (the
 declaration was written FOR SBOM purposes; discovered components never carry
 these fields). No file paths, no source code, no hostnames. This is the
 data-minimisation promise shown to the prospect via ``--dry-run``; declared
@@ -27,7 +27,7 @@ class CheckComponent(BaseModel):
     """One detected third-party component (metadata only).
 
     ``supplier``/``license``/``purl``/``cpe`` are filled ONLY for
-    components declared by the customer in ``embtrace-deps.yaml``
+    components declared by the customer in ``jochwacht-deps.yaml``
     (``source_type == "declared"``) — never for discovered ones.
     """
 

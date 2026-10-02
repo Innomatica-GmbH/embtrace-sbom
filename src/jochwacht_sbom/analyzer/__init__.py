@@ -1,1 +1,1 @@
-"""Vendored subset of the embtrace analyzer (deterministic tiers only)."""
+"""Vendored subset of the jochwacht analyzer (deterministic tiers only)."""

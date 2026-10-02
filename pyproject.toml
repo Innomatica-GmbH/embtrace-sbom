@@ -1,7 +1,7 @@
 [project]
 name = "jochwacht-sbom"
 version = "0.13.0"
-description = "SBOM generation for embedded builds — CMake, Meson, Autotools, Yocto, Buildroot, Zephyr, vcpkg — one command writes a CycloneDX bill of materials from your build; sends nothing unless you say so. Formerly embtrace-check."
+description = "SBOM generation for embedded builds — CMake, Meson, Autotools, Yocto, Buildroot, Zephyr, vcpkg — one command writes a CycloneDX bill of materials from your build; sends nothing unless you say so. Formerly jochwacht-sbom."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -38,11 +38,6 @@ Privacy = "https://jochwacht.dev/check-privacy"
 
 [project.scripts]
 jochwacht-sbom = "jochwacht_sbom.cli:main"
-# Both old names keep working — one line of notice, same tool. Installing
-# this package alone is enough; the shim distributions on PyPI exist only
-# for people who install by the old NAME (pip install embtrace-sbom).
-embtrace-sbom = "jochwacht_sbom.cli:main_sbom_alias"
-embtrace-check = "jochwacht_sbom.cli:main_check_alias"
 
 [build-system]
 requires = ["hatchling"]
@@ -61,7 +56,7 @@ line-length = 100
 src = ["src"]
 
 [tool.ruff.lint]
-# Same rule set as the embtrace main repo — the vendored analyzer/sbom
+# Same rule set as the jochwacht main repo — the vendored analyzer/sbom
 # modules must stay lint-clean under identical rules in both repos.
 select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM", "TC"]
 ignore = ["TC003"]

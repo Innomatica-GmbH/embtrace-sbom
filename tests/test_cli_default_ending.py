@@ -1,6 +1,6 @@
 """0.9.1 — the default run ends in text, not a question (Ivan, 11.09.2026).
 
-Red before: with a TTY the run asked "Send it to embtrace now …? Send now?",
+Red before: with a TTY the run asked "Send it to jochwacht now …? Send now?",
 printed "Your bill of materials is yours: …" and, on a second run, wrote
 sbom.cdx-2.json beside the first file.
 """
@@ -41,7 +41,7 @@ class TestNoQuestion:
         res = _tty_run([str(proj)])
         assert res.exit_code == 0, res.output
         assert "Send now?" not in res.output
-        assert "Send it to embtrace" not in res.output
+        assert "Send it to jochwacht" not in res.output
         assert "is yours" not in res.output
         assert "Wrote sbom.cdx.json (1 component)." in res.output
         assert "Nothing was transmitted." in res.output
@@ -89,7 +89,7 @@ class TestSecondRunUpdates:
         proj = _project(tmp_path)
         (proj / "sbom.cdx.json").write_text(json.dumps({
             "bomFormat": "CycloneDX", "specVersion": "1.6",
-            "metadata": {"tools": [{"name": "embtrace-check", "version": "0.8.6"}]},
+            "metadata": {"tools": [{"name": "jochwacht-sbom", "version": "0.8.6"}]},
             "components": [],
         }), encoding="utf-8")
         res = _tty_run([str(proj)])

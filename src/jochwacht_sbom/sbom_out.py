@@ -105,19 +105,11 @@ def build_cyclonedx(
     }
 
 
-#: Every name this tool has EVER signed its own output with
-#: (``metadata.tools``). The list only grows: a file written by an older
-#: release is still our file, and refusing to overwrite it would send the
-#: customer to ``--sbom PATH`` for a bill we wrote ourselves last week.
-#:
-#: The rename of 01.10.2026 dropped ``embtrace-sbom`` from this set by
-#: accident — the search-and-replace that renamed the PACKAGE also renamed
-#: the historical stamp, which is a record of the past and must not move.
-OWN_TOOL_NAMES = frozenset({
-    "jochwacht-sbom",   # since 0.12.0
-    "embtrace-sbom",    # 0.9.0 – 0.11.1
-    "embtrace-check",   # up to 0.8.6
-})
+#: The name this tool signs its own output with (``metadata.tools``).
+#: An existing bill is overwritten only when we wrote it ourselves;
+#: anything else — a suite bill, a stranger's, an unstamped file — is left
+#: untouched.
+OWN_TOOL_NAMES = frozenset({"jochwacht-sbom"})
 
 
 def classify_existing(path: Path) -> str:

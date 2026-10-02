@@ -1,6 +1,6 @@
 """Declared metadata travels — discovered components stay metadata-only.
 
-A declaration in embtrace-deps.yaml is written FOR SBOM purposes: its
+A declaration in jochwacht-deps.yaml is written FOR SBOM purposes: its
 supplier/license/purl/cpe travel by default (v0.5.0) and are labelled
 ``source_type: "declared"`` so the report can tell declaration from
 discovery apart. The privacy promise for discovered components is
@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from jochwacht_sbom.collector import collect_components
-from jochwacht_sbom.sbom.scanner import scan_embtrace_deps
+from jochwacht_sbom.sbom.scanner import scan_jochwacht_deps
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,13 +33,13 @@ dependencies:
 
 
 def _project(tmp_path: Path) -> Path:
-    (tmp_path / "embtrace-deps.yaml").write_text(_DECLARATION, encoding="utf-8")
+    (tmp_path / "jochwacht-deps.yaml").write_text(_DECLARATION, encoding="utf-8")
     return tmp_path
 
 
 def test_scanner_reads_declared_purl_and_cpe(tmp_path: Path) -> None:
-    f = _project(tmp_path) / "embtrace-deps.yaml"
-    deps = {d.name: d for d in scan_embtrace_deps(f)}
+    f = _project(tmp_path) / "jochwacht-deps.yaml"
+    deps = {d.name: d for d in scan_jochwacht_deps(f)}
     zephyr = deps["zephyr"]
     assert zephyr.purl == "pkg:github/zephyrproject-rtos/zephyr@v4.1.0"
     assert zephyr.cpe == "cpe:2.3:o:zephyrproject:zephyr:4.1.0:*:*:*:*:*:*:*"

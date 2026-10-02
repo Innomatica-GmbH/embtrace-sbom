@@ -361,7 +361,7 @@ class CmakeTraceScanner:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             tmp_path = Path(tmp.name)
 
-        build_dir = project_path / "_embtrace_cmake_trace"
+        build_dir = project_path / "_jochwacht_cmake_trace"
         build_dir.mkdir(exist_ok=True)
 
         result = _run_cmd(

@@ -336,7 +336,7 @@ class TestUnsupportedBuild:
         (proj / ".hidden" / "SConstruct").write_text("", encoding="utf-8")
         (proj / "legacy").mkdir()
         (proj / "legacy" / "old.uvprojx").write_text("", encoding="utf-8")
-        (proj / ".embtraceignore").write_text("legacy\n", encoding="utf-8")
+        (proj / ".jochwachtignore").write_text("legacy\n", encoding="utf-8")
         (proj / "app.ioc").write_text("", encoding="utf-8")
         assert diagnosis.find_unsupported_markers(proj) == {"stm32cubemx": 1}
 

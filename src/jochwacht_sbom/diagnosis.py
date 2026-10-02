@@ -57,7 +57,7 @@ SUPPORT_ADDRESS = "support@innomatica.de"
 #: Environment variable that turns the sanitised report back into a plain
 #: Python traceback on the terminal (for developers; nothing else changes).
 #: Spelled once, in :mod:`jochwacht_sbom.env`, which also still answers to
-#: the pre-rename ``EMBTRACE_SBOM_TRACEBACK``.
+#: the pre-rename ``JOCHWACHT_SBOM_TRACEBACK``.
 TRACEBACK_ENV = env.TRACEBACK_ENV
 
 #: Build systems jochwacht-sbom does not read yet, keyed by OUR label; the
@@ -262,7 +262,7 @@ def find_unsupported_markers(path: Path, *, max_depth: int = 5) -> dict[str, int
     """Count marker files of build systems we do not read, by OUR label.
 
     Walks the tree with the same rules as the dependency scan (hidden and
-    build-output directories skipped, ``.embtraceignore`` honoured, same
+    build-output directories skipped, ``.jochwachtignore`` honoured, same
     depth). Returns ``{label: count}`` for labels with at least one hit —
     never a file name.
     """

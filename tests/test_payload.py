@@ -70,7 +70,7 @@ def test_payload_json_contains_no_paths() -> None:
     parsed = json.loads(raw)
     # Explicit allowlist — extending it is a product decision.
     # supplier/license/purl/cpe: filled only for source_type "declared"
-    # (the customer's own embtrace-deps.yaml), v0.5.0.
+    # (the customer's own jochwacht-deps.yaml), v0.5.0.
     assert set(parsed["components"][0].keys()) == {
         "name",
         "version",

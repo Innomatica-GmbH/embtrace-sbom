@@ -27,7 +27,7 @@ _configured = False
 
 
 def setup_logging(*, verbosity: int = 0, json_mode: bool = False) -> None:
-    """Configure the root embtrace logger.
+    """Configure the root jochwacht logger.
 
     Args:
         verbosity: 0 = WARNING, 1 = INFO, 2+ = DEBUG.
@@ -54,7 +54,7 @@ def setup_logging(*, verbosity: int = 0, json_mode: bool = False) -> None:
             markup=True,
         )
 
-    root = logging.getLogger("embtrace")
+    root = logging.getLogger("jochwacht")
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level)
@@ -62,7 +62,7 @@ def setup_logging(*, verbosity: int = 0, json_mode: bool = False) -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a logger under the ``embtrace`` namespace.
+    """Return a logger under the ``jochwacht`` namespace.
 
     Args:
         name: Typically ``__name__`` of the calling module.

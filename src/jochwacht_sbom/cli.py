@@ -115,7 +115,7 @@ _stdout = Console(soft_wrap=True)
     "no_declared_metadata",
     is_flag=True,
     help="Do not transmit supplier/license/purl/cpe you declared in "
-    "embtrace-deps.yaml (they are included by default because you wrote "
+    "jochwacht-deps.yaml (they are included by default because you wrote "
     "them for SBOM purposes; --dry-run shows the payload either way).",
 )
 @click.option(
@@ -179,7 +179,7 @@ def main(  # noqa: PLR0913 — CLI surface, mirrors documented flags
         # No traceback on the customer's screen, no silent exit: a local
         # diagnosis file and one sentence asking for a mail. Developers get
         # the plain traceback with JOCHWACHT_SBOM_TRACEBACK=1 (the old
-        # EMBTRACE_ spelling still works, see jochwacht_sbom.env).
+        # JOCHWACHT_ spelling still works, see jochwacht_sbom.env).
         if env.get(diagnosis.TRACEBACK_ENV):
             raise
         where = diagnosis.write_report(diagnosis.crash_report(exc), near=path)
@@ -370,8 +370,8 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
                 "(it reads deploy/images/*.manifest resp. "
                 "legal-info/manifest.csv), not in the recipe source tree.\n"
                 "For proprietary components without a package manager: declare "
-                "them once in embtrace-deps.yaml and re-run.\n"
-                "Adjust exclusions via a committed .embtraceignore."
+                "them once in jochwacht-deps.yaml and re-run.\n"
+                "Adjust exclusions via a committed .jochwachtignore."
             )
         elif conditional:
             # Build files WERE read; the default build has no components, but
@@ -385,7 +385,7 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
                 "ship.\n"
                 "Configure the build once (e.g. `cmake -S . -B build "
                 "-DWITH_SSL=ON`) so jochwacht-sbom reads which you actually "
-                "use, or declare it in embtrace-deps.yaml."
+                "use, or declare it in jochwacht-deps.yaml."
             )
         else:
             # Build files read, genuinely nothing — self-contained.
@@ -396,10 +396,10 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
                 "no third-party packages are declared. For a self-contained "
                 "library that is plausible.\n"
                 "If you link system libraries via `-l` or vendor foreign code "
-                "(third_party/, vendor/), declare it in embtrace-deps.yaml — "
+                "(third_party/, vendor/), declare it in jochwacht-deps.yaml — "
                 "or configure the build once (e.g. `cmake -S . -B build`) so "
                 "jochwacht-sbom can read build/CMakeCache.txt.\n"
-                "Adjust exclusions via a committed .embtraceignore."
+                "Adjust exclusions via a committed .jochwachtignore."
             )
         if stats.build_files_scanned == 0 and unread:
             # Nothing we read, but something we recognise: the file names
@@ -464,12 +464,12 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         console.print(
             f"[dim]{ausgeschlossen} component(s) from test/example "
             f"directories or dev tooling marked scope=excluded — listed, "
-            f"never gating. Adjust via .embtraceignore.[/dim]"
+            f"never gating. Adjust via .jochwachtignore.[/dim]"
         )
     declared = sum(1 for c in components if c.source_type == "declared")
     if declared and not no_declared_metadata:
         console.print(
-            f"[dim]{declared} component(s) from embtrace-deps.yaml include the "
+            f"[dim]{declared} component(s) from jochwacht-deps.yaml include the "
             f"supplier/license/purl/cpe you declared there "
             f"(--no-declared-metadata to withhold, --dry-run to inspect).[/dim]"
         )
@@ -552,23 +552,3 @@ if __name__ == "__main__":
     main()
 
 
-def _moved_notice(old_name: str) -> None:
-    """One line on stderr, so a pipeline that reads stdout is unaffected."""
-    Console(stderr=True).print(
-        f"[yellow]{old_name} is now jochwacht-sbom — same tool, new name "
-        f"(pipx install jochwacht-sbom). This alias keeps working.[/yellow]"
-    )
-
-
-def main_check_alias() -> None:
-    """``embtrace-check`` — the first old command name, kept so printed
-    instructions and today's articles keep working."""
-    _moved_notice("embtrace-check")
-    main()
-
-
-def main_sbom_alias() -> None:
-    """``embtrace-sbom`` — the name the tool carried until 0.11.1, kept for
-    the CI files and scripts that install it by that name."""
-    _moved_notice("embtrace-sbom")
-    main()

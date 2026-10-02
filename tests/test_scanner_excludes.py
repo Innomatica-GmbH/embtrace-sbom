@@ -1,5 +1,5 @@
-"""Excludes (.embtraceignore + build outputs) and manifest-floor handling —
-ported from embtrace 0.15.9 so customer payloads carry no phantom
+"""Excludes (.jochwachtignore + build outputs) and manifest-floor handling —
+ported from jochwacht 0.15.9 so customer payloads carry no phantom
 components or dist/ duplicates."""
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ def test_floor_loses_against_lock_across_directories(tmp_path: Path) -> None:
     assert [d.version for d in pillow] == ["12.3.0"]
 
 
-def test_dist_and_embtraceignore_are_skipped(tmp_path: Path) -> None:
+def test_dist_and_jochwachtignore_are_skipped(tmp_path: Path) -> None:
     (tmp_path / "requirements.txt").write_text("real==1.0\n", encoding="utf-8")
     staged = tmp_path / "dist" / "staging"
     staged.mkdir(parents=True)
     (staged / "requirements.txt").write_text("phantom==6.6.6\n", encoding="utf-8")
-    (tmp_path / ".embtraceignore").write_text("legacy\n", encoding="utf-8")
+    (tmp_path / ".jochwachtignore").write_text("legacy\n", encoding="utf-8")
     legacy = tmp_path / "legacy"
     legacy.mkdir()
     (legacy / "requirements.txt").write_text("old==0.1\n", encoding="utf-8")

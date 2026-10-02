@@ -1,29 +1,29 @@
 # jochwacht-sbom
 
-> **Formerly embtrace-check, then embtrace-sbom.** Same tool, same code line,
+> **Formerly jochwacht-sbom, then jochwacht-sbom.** Same tool, same code line,
 > new name — the old one collided with a registered trademark. From 0.9.0 on,
-> GPL-3.0-or-later. `pipx install jochwacht-sbom`; the `embtrace-check` and
-> `embtrace-sbom` commands keep working with a one-line notice, and both old
-> packages install this one. Releases up to embtrace-check 0.8.6 stay MIT.
+> GPL-3.0-or-later. `pipx install jochwacht-sbom`; the `jochwacht-sbom` and
+> `jochwacht-sbom` commands keep working with a one-line notice, and both old
+> packages install this one. Releases up to jochwacht-sbom 0.8.6 stay MIT.
 
 ### If you already had the old package
 
 One package now provides all three commands, so the old installations are
 redundant — and `pipx` will not replace a command another installation
-already owns ("File exists at …/embtrace-sbom … Not modifying"):
+already owns ("File exists at …/jochwacht-sbom … Not modifying"):
 
 ```bash
-pipx uninstall embtrace-sbom      # if you have it
-pipx uninstall embtrace-check     # if you have it
+pipx uninstall jochwacht-sbom      # if you have it
+pipx uninstall jochwacht-sbom     # if you have it
 pipx install --force jochwacht-sbom
 ```
 
-With `pip`, `pip install -U embtrace-sbom` is enough: it installs
+With `pip`, `pip install -U jochwacht-sbom` is enough: it installs
 `jochwacht-sbom` and keeps the old command working.
 
 Nothing else needs touching. Your scripts keep running, `import
-embtrace_sbom.…` resolves to the new modules, `except EmbtraceError` catches
-the same class, `EMBTRACE_*` environment variables are still read, and a
+jochwacht_sbom.…` resolves to the new modules, `except JochwachtError` catches
+the same class, `JOCHWACHT_*` environment variables are still read, and a
 bill written by any earlier release is still recognised as yours.
 
 **Reads your build, writes your bill of materials — locally.** One command in
@@ -119,7 +119,7 @@ and what it never does — is spelled out [further down](#what-a-send-contains--
   Intel/Altera Quartus `*_hw.tcl`),
 - the project folder name (hash it with `--anonymize`),
 - scan statistics (number of build files, tool version),
-- **only if you wrote them yourself** in `embtrace-deps.yaml`: the
+- **only if you wrote them yourself** in `jochwacht-deps.yaml`: the
   supplier, license, purl and CPE entries of your declaration — a
   declaration is written for SBOM purposes, so it travels by default and
   makes your report complete (58 instead of 17 attributed licenses on a
@@ -129,7 +129,7 @@ and what it never does — is spelled out [further down](#what-a-send-contains--
 **Never transmitted:** source code, file paths, file contents, configuration,
 credentials. The supplier of a *detected* FPGA IP core is known locally but
 deliberately **not** transmitted — a supplier you declare yourself in
-`embtrace-deps.yaml` is your statement and does travel.
+`jochwacht-deps.yaml` is your statement and does travel.
 See for yourself before sending anything:
 
 ```bash
@@ -138,14 +138,14 @@ jochwacht-sbom . --dry-run      # prints the exact payload, uploads nothing
 
 Build outputs (`dist/`, `build/`, `node_modules/`, …) and hidden
 directories are never scanned. Project-specific excludes go into a
-committed `.embtraceignore` at the project root — one glob pattern per
+committed `.jochwachtignore` at the project root — one glob pattern per
 line, `#` comments.
 
 **Quality rules** (v0.6.0): component identity is (name, version,
 ecosystem) — nested second versions of one package are kept as own rows
 (the older nested version is often the vulnerable one); build tools and
 system libraries (`Doxygen`, `-lanl`, `find_package(Git)`, …) are
-dropped via a curated 950-name skip list — your own `embtrace-deps.yaml`
+dropped via a curated 950-name skip list — your own `jochwacht-deps.yaml`
 declarations are never skipped; `*` and guessed versions are never
 reported — a missing version is shown as honestly missing. If no
 supported build system is found, nothing is uploaded and the tool tells
@@ -186,7 +186,7 @@ and writes the same file with `"kind": "unsupported_build"` — labels and
 counts only, no file names. Next to a build system it does read, an unread
 one is named in a dim line and no file is written. Developers who want the
 plain traceback set `JOCHWACHT_SBOM_TRACEBACK=1` (the pre-rename
-`EMBTRACE_SBOM_TRACEBACK` is still read, so existing setups keep working).
+`JOCHWACHT_SBOM_TRACEBACK` is still read, so existing setups keep working).
 
 ## Exit codes
 
@@ -194,7 +194,7 @@ plain traceback set `JOCHWACHT_SBOM_TRACEBACK=1` (the pre-rename
 |------|---------|
 | 0    | success |
 | 1    | error (network, missing --email with --send, a crashed reader — the bill is incomplete, diagnosis file written, …) |
-| 2    | no supported build system found — declare dependencies manually in `embtrace-deps.yaml`; markers of unread build systems are named |
+| 2    | no supported build system found — declare dependencies manually in `jochwacht-deps.yaml`; markers of unread build systems are named |
 
 ## Privacy
 
@@ -215,7 +215,7 @@ welcome — please report security topics per [SECURITY.md](SECURITY.md).
 ## License
 
 GPL-3.0-or-later, Copyright (C) 2026 Innomatica GmbH — see [LICENSE](LICENSE).
-Releases up to and including embtrace-check 0.8.6 were published under the MIT
+Releases up to and including jochwacht-sbom 0.8.6 were published under the MIT
 License and remain available under it. The GPL keeps the one argument this
 tool is published for intact: anyone can read, run and verify what it does,
 and improvements to it stay open.

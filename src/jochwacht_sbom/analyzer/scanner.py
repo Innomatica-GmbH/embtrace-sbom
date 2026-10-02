@@ -144,7 +144,7 @@ def collect_build_files(
                 )
                 for i in range(len(parent_parts))
             ):
-                logger.info("Skipping %s (.embtraceignore)", relative)
+                logger.info("Skipping %s (.jochwachtignore)", relative)
                 continue
 
             resolved = match.resolve()

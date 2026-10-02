@@ -1,1 +1,1 @@
-"""Vendored subset of the embtrace SBOM scanner (lockfile parsing only)."""
+"""Vendored subset of the jochwacht SBOM scanner (lockfile parsing only)."""

@@ -1,11 +1,11 @@
 """Curated skip list — names that are never product components.
 
-Generated from the embtrace suite's curated data (952 names:
+Generated from the jochwacht suite's curated data (952 names:
 build tools, glibc/system libs, macOS frameworks, Windows DLLs, and the
 cmake→conan skip section). A ``find_package(Git)`` or ``-lanl`` is
 build tooling / platform, not an ingredient of the product (order
 collector-embedded-buildsysteme, Befund 12 — measured at paho.mqtt.c).
-A customer's own declaration in ``embtrace-deps.yaml`` is never skipped.
+A customer's own declaration in ``jochwacht-deps.yaml`` is never skipped.
 """
 
 from __future__ import annotations

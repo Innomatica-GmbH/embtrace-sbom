@@ -1,10 +1,10 @@
 """Dependency collection for the CRA Readiness Check.
 
-Combines the two deterministic detection paths that already power embtrace:
+Combines the two deterministic detection paths that already power jochwacht:
 
-1. :func:`embtrace.sbom.scanner.scan_directory_recursive` — lockfiles and
+1. :func:`jochwacht.sbom.scanner.scan_directory_recursive` — lockfiles and
    manifests (16 formats, high confidence).
-2. :func:`embtrace.analyzer.pipeline.run_pipeline` — build-file analysis via
+2. :func:`jochwacht.analyzer.pipeline.run_pipeline` — build-file analysis via
    the multi-tier pipeline, restricted to the deterministic tiers (2 = struct-
    ured parsers, 4 = regex; tier 1 CLI tools optional via ``with_tools``).
 
@@ -53,7 +53,7 @@ _NAME_ONLY_ECOSYSTEMS = frozenset({
 
 def _project_name(path: Path) -> str:
     """Project identity for the self-reference filter (Befund 75): the name in
-    jochwacht.yaml (or the older embtrace.yaml) if the tree carries one, else
+    jochwacht.yaml (or the older jochwacht.yaml) if the tree carries one, else
     the directory name — the same precedence the suite uses, so both tools
     agree on what "self" is."""
     cfg = file_names.find(path, file_names.CONFIG)
@@ -148,7 +148,7 @@ def collect_components(
     # The project's own name (its directory) is not a third-party component;
     # neither is an unexpanded CMake variable (Befund 47).
     # Self-reference identity from the same source as the suite (Befund 75):
-    # the project name in embtrace.yaml when present, else the directory name.
+    # the project name in jochwacht.yaml when present, else the directory name.
     # (The suite filters self-refs by its --project/config name; a measurement
     # in a differently-named copy dir must not diverge.)
     proj = normalize_dep_name(_project_name(path))
@@ -237,7 +237,7 @@ def collect_components(
         # (Befund 13); ambiguous names go to the server, which has the DB.
         if not dep.declared and _is_parser_noise(dep.name, dep.version, dep.ecosystem):
             continue
-        # Entries from embtrace-deps.yaml are the customer's own SBOM
+        # Entries from jochwacht-deps.yaml are the customer's own SBOM
         # declaration: they keep the metadata written there (opt-out via
         # include_declared_metadata) and are labelled "declared" so the
         # server can tell declaration from discovery apart.

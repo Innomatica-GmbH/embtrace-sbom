@@ -17,7 +17,7 @@ Supports:
 - pom.xml                     (Maven)
 - go.sum                      (Go Modules)
 - alire.lock                  (Ada/SPARK Alire)
-- embtrace-deps.yaml          (manual declaration for proprietary libs)
+- jochwacht-deps.yaml          (manual declaration for proprietary libs)
 - *.hwh / *.xci / *.tcl       (FPGA IP cores — Vivado IP-XACT VLNV, Libero
                                core_vlnv, Quartus *_hw.tcl; matched by suffix)
 """
@@ -110,7 +110,7 @@ class Dependency(BaseModel):
     # SBOM honesty, NOT a query filter — dev components are still checked
     # for vulnerabilities (order osv-chunking A4).
     scope: str = ""
-    # True only for entries the customer wrote into embtrace-deps.yaml.
+    # True only for entries the customer wrote into jochwacht-deps.yaml.
     # A declaration is authoritative (its supplier/license/purl/cpe were
     # stated on purpose, they beat anything a database could guess) and,
     # for the check collector, it is the ONLY class of component whose
@@ -693,8 +693,8 @@ def scan_west_manifest(path: Path) -> list[Dependency]:
     return deps
 
 
-def scan_embtrace_deps(path: Path) -> list[Dependency]:
-    """Parse a embtrace-deps.yaml manual dependency declaration."""
+def scan_jochwacht_deps(path: Path) -> list[Dependency]:
+    """Parse a jochwacht-deps.yaml manual dependency declaration."""
     deps: list[Dependency] = []
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -1451,7 +1451,7 @@ def scan_vivado_xci(path: Path) -> list[Dependency]:
 
 _LIBERO_NOTE = (
     "version not pinned in the project (Libero '*' wildcard) — resolved at "
-    "generation time; declare the built version via embtrace-deps.yaml"
+    "generation time; declare the built version via jochwacht-deps.yaml"
 )
 
 
@@ -1556,7 +1556,7 @@ def scan_libero_cxf(path: Path) -> list[Dependency]:
 #: Directories never descended into when sweeping for FPGA tool output.
 _FPGA_EXCLUDE_DIRS = {
     ".git", ".svn", ".hg", "node_modules", ".venv", "venv",
-    "__pycache__", ".tox", ".embtrace",
+    "__pycache__", ".tox", ".jochwacht",
 }
 
 
@@ -1611,9 +1611,7 @@ _SCANNERS: dict[str, tuple[str, type[object] | None]] = {
     "Pipfile.lock": ("pipfile_lock", None),
     "vcpkg.json": ("vcpkg_json", None),
     "CMakeLists.txt": ("cmake", None),
-    # beide Schreibweisen — die Suite ist eine eigene Freigabelinie
-    file_names.DEPS: ("embtrace_deps", None),
-    file_names.LEGACY_DEPS: ("embtrace_deps", None),
+    file_names.DEPS: ("jochwacht_deps", None),
     "west.yml": ("west_manifest", None),
     "Cargo.lock": ("cargo_lock", None),
     "package-lock.json": ("package_lock_json", None),
@@ -1643,7 +1641,7 @@ _SCANNER_FUNCS = {
     "vcpkg_json": scan_vcpkg_json,
     # "cmake" is handled specially in scan_directory (it needs the project
     # option/cache context) — deliberately not in this uniform-signature map.
-    "embtrace_deps": scan_embtrace_deps,
+    "jochwacht_deps": scan_jochwacht_deps,
     "west_manifest": scan_west_manifest,
     "cargo_lock": scan_cargo_lock,
     "package_lock_json": scan_package_lock_json,
@@ -1770,7 +1768,7 @@ def scan_directory(
             )
         ]
 
-    # Manual deps (embtrace-deps.yaml) are authoritative — when a manual entry
+    # Manual deps (jochwacht-deps.yaml) are authoritative — when a manual entry
     # exists for a component, drop auto-detected entries with the same name so
     # the richer metadata (supplier, license, purl) is kept.
     manual_names: set[str] = {
@@ -1817,7 +1815,7 @@ IGNORE_FILENAME = file_names.IGNORE
 def load_ignore_patterns(root: Path) -> list[str]:
     """Read ``.jochwachtignore`` at *root* (empty list when absent).
 
-    Falls back to the pre-rename ``.embtraceignore``; the new spelling wins
+    Falls back to the pre-rename ``.jochwachtignore``; the new spelling wins
     when both exist. Reading only the new name would quietly stop honouring
     an exclusion file the customer already has — the scan would get larger
     and nothing would say why.
@@ -1916,9 +1914,9 @@ def scan_directory_recursive(
     manifest-constraint versions shadowed by a resolved version of the same
     package are dropped (:func:`prefer_locked`). Build-output directories
     (:data:`DEFAULT_EXCLUDE_DIRS`), hidden directories, and everything
-    matched by a ``.embtraceignore`` at *path* are skipped.
+    matched by a ``.jochwachtignore`` at *path* are skipped.
 
-    This is used by the analyzer flow (``embtrace init --scan``) to find
+    This is used by the analyzer flow (``jochwacht init --scan``) to find
     lockfiles in mono-repos and nested sub-projects.
 
     Args:
@@ -1986,7 +1984,7 @@ def scan_directory_recursive(
             except ValueError:
                 rel = name
             if _is_ignored(rel, name, ignore_patterns):
-                logger.info("Skipping %s (.embtraceignore)", rel)
+                logger.info("Skipping %s (.jochwachtignore)", rel)
                 continue
             _walk(entry, depth + 1)
 

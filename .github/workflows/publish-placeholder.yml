@@ -1,19 +1,10 @@
 name: publish-placeholder
-# Two name reservations, each published by its own tag so one can never
-# ride along with the other by accident:
-#   jochwacht-placeholder-v*  -> placeholder-jochwacht  (new name)
-#   embtrace-placeholder-v*   -> placeholder-embtrace   (old name, final
-#                                version, points at the new one)
+# The name reservation jochwacht on PyPI. Published by its own tag so a
+# routine release can never push it by accident.
 on:
   push:
-    tags: ["jochwacht-placeholder-v*", "embtrace-placeholder-v*"]
+    tags: ["jochwacht-placeholder-v*"]
   workflow_dispatch:
-    inputs:
-      which:
-        description: "placeholder-jochwacht or placeholder-embtrace"
-        required: true
-        type: choice
-        options: [placeholder-jochwacht, placeholder-embtrace]
 jobs:
   pypi:
     runs-on: ubuntu-latest
@@ -23,16 +14,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: pick the directory from the tag (or the dispatch input)
-        id: pick
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            jochwacht-placeholder-v*) DIR=placeholder-jochwacht ;;
-            embtrace-placeholder-v*)  DIR=placeholder-embtrace ;;
-            *)                        DIR="${{ inputs.which }}" ;;
-          esac
-          test -n "$DIR" && test -d "$DIR"
-          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-      - run: pip install build && python -m build "${{ steps.pick.outputs.dir }}"
+      - run: pip install build && python -m build placeholder-jochwacht
       - uses: pypa/gh-action-pypi-publish@release/v1
-        with: { packages-dir: "${{ steps.pick.outputs.dir }}/dist" }
+        with: { packages-dir: placeholder-jochwacht/dist }

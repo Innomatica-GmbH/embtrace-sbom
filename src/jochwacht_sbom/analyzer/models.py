@@ -121,7 +121,7 @@ class InternalDepEntry(BaseModel):
 # ---------------------------------------------------------------------------
 
 class DecisionsFile(BaseModel):
-    """Root model for .embtrace/proposal/decisions.yaml."""
+    """Root model for .jochwacht/proposal/decisions.yaml."""
 
     scan_date: str
     model: str = ""

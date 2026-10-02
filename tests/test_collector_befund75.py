@@ -6,7 +6,7 @@ Measured divergences at an unconfigured libwebsockets clone (0.8.3):
 2. Scope diverged: mbedtls/wolfssl/opus were wrongly excluded-conditional
    while the suite lists them as open build_file_only entries.
 3. Self-reference filtered by the DIRECTORY name — now by the project name
-   (embtrace.yaml when present), the same source the suite uses.
+   (jochwacht.yaml when present), the same source the suite uses.
 4. Git / a program-only Find module (OpenSSLbins) were DROPPED, while the
    suite lists them as scope=excluded — both must show the same set.
 
@@ -48,10 +48,10 @@ find_package(RealDep)
 
 
 class TestProjectName:
-    def test_prefers_embtrace_yaml(self, tmp_path: Path) -> None:
+    def test_prefers_jochwacht_yaml(self, tmp_path: Path) -> None:
         tree = tmp_path / "some-copy-dir"
         tree.mkdir()
-        (tree / "embtrace.yaml").write_text(
+        (tree / "jochwacht.yaml").write_text(
             "project:\n  name: libwebsockets\n", encoding="utf-8")
         assert _project_name(tree) == "libwebsockets"
 

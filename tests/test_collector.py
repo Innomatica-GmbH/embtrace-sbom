@@ -120,7 +120,7 @@ def test_skip_list_drops_build_tools_never_declared(tmp_path: Path) -> None:
         "find_package(Doxygen)\nfind_package(OpenSSL REQUIRED)\n",
         encoding="utf-8",
     )
-    (tmp_path / "embtrace-deps.yaml").write_text(
+    (tmp_path / "jochwacht-deps.yaml").write_text(
         "dependencies:\n"
         "  - name: doxygen\n"     # absurd, but declared = their statement
         "    version: '1.9'\n"

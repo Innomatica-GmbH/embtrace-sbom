@@ -27,9 +27,8 @@ from jochwacht_sbom import filenames, properties
 
 class TestThePropertyNamespace:
     def test_the_prefix_is_the_one_the_suite_reads(self) -> None:
-        # Suite: embtrace/sbom/properties.py, PREFIX / LEGACY_PREFIX.
+        # Suite: jochwacht/sbom/properties.py, PREFIX.
         assert properties.PREFIX == "jochwacht:"
-        assert properties.LEGACY_PREFIX == "embtrace:"
 
     def test_a_written_bill_carries_the_new_namespace_only(
         self, tmp_path: Path,
@@ -52,20 +51,19 @@ class TestThePropertyNamespace:
         ]
         assert names, "ohne Eigenschaften prueft der Test nichts"
         assert all(n.startswith("jochwacht:") for n in names), names
-        assert not any(n.startswith("embtrace:") for n in names)
 
 
 class TestTheFilesTheCustomerWrites:
-    @pytest.mark.parametrize(("new", "old"), [
-        ("jochwacht.yaml", "embtrace.yaml"),
-        ("jochwacht-deps.yaml", "embtrace-deps.yaml"),
-        (".jochwachtignore", ".embtraceignore"),
+    @pytest.mark.parametrize("name", [
+        "jochwacht.yaml", "jochwacht-deps.yaml", ".jochwachtignore",
     ])
-    def test_both_spellings_are_known(self, new: str, old: str) -> None:
-        assert filenames.both(new) == (new, old)
+    def test_the_suite_and_this_tool_use_the_same_names(self, name: str) -> None:
+        # Suite: jochwacht/core/filenames.py — the lists must agree, or one
+        # tool honours a file the other ignores.
+        assert name in filenames.ALL
 
-    @pytest.mark.parametrize("written", [".jochwachtignore", ".embtraceignore"])
-    def test_either_ignore_file_is_honoured(
+    @pytest.mark.parametrize("written", [".jochwachtignore"])
+    def test_the_ignore_file_is_honoured(
         self, written: str, tmp_path: Path,
     ) -> None:
         from jochwacht_sbom.sbom.scanner import load_ignore_patterns
@@ -73,15 +71,8 @@ class TestTheFilesTheCustomerWrites:
         (tmp_path / written).write_text("build\nstaging\n", encoding="utf-8")
         assert load_ignore_patterns(tmp_path) == ["build", "staging"]
 
-    def test_the_new_ignore_file_wins_when_both_exist(self, tmp_path: Path) -> None:
-        from jochwacht_sbom.sbom.scanner import load_ignore_patterns
-
-        (tmp_path / ".jochwachtignore").write_text("neu\n", encoding="utf-8")
-        (tmp_path / ".embtraceignore").write_text("alt\n", encoding="utf-8")
-        assert load_ignore_patterns(tmp_path) == ["neu"]
-
-    @pytest.mark.parametrize("written", ["jochwacht.yaml", "embtrace.yaml"])
-    def test_the_project_identity_is_read_from_either_config(
+    @pytest.mark.parametrize("written", ["jochwacht.yaml"])
+    def test_the_project_identity_is_read_from_the_config(
         self, written: str, tmp_path: Path,
     ) -> None:
         # Befund 75: both tools must agree on what "self" is, or the

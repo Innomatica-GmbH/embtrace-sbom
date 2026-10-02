@@ -3,9 +3,9 @@
 All Jochwacht exceptions inherit from JochwachtError so callers can catch
 broadly or narrowly as needed.
 
-``EmbtraceError`` is kept as an alias at the bottom of this module: it was
+``JochwachtError`` is kept as an alias at the bottom of this module: it was
 importable from a published package for seven releases, and an ``except
-EmbtraceError`` in somebody's script should not start passing exceptions
+JochwachtError`` in somebody's script should not start passing exceptions
 through because we renamed a product.
 """
 
@@ -231,9 +231,3 @@ class CheckCollectionError(CheckError):
 
 class CheckUploadError(CheckError):
     """Failed to upload the check payload to the submit endpoint."""
-
-
-#: The pre-rename name of the base class. Same object, not a subclass, so
-#: ``except EmbtraceError`` and ``except JochwachtError`` catch the same
-#: things and ``isinstance`` agrees with both.
-EmbtraceError = JochwachtError

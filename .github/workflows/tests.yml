@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python-version }}" }
-      - run: pip install -e ".[dev]" -e shim/embtrace-check
+      - run: pip install -e ".[dev]" -e shim/jochwacht-sbom
       - run: ruff check src tests
       # Failures become check-run annotations (readable without a login,
       # also through the API) — the raw job log is admin-only.
