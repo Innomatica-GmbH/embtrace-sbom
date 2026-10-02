@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python-version }}" }
-      - run: pip install -e ".[dev]" -e shim/jochwacht-sbom
+      - run: pip install -e ".[dev]"
       - run: ruff check src tests
       # Failures become check-run annotations (readable without a login,
       # also through the API) — the raw job log is admin-only.
@@ -28,4 +28,7 @@ jobs:
       - if: failure()
         shell: bash
         run: |
+          # Scheitert schon die Installation, gibt es keine pytest-Ausgabe —
+          # dann still bleiben statt einen zweiten, falschen Fehler zu melden.
+          [ -f pytest-out.txt ] || { echo "kein pytest-Lauf — der Fehler liegt vor den Tests"; exit 0; }
           grep -E "^(FAILED|ERROR|E   |tests/.*::)" pytest-out.txt | head -40 | while IFS= read -r l; do echo "::error::${l}"; done

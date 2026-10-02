@@ -47,7 +47,8 @@ build-backend = "hatchling.build"
 packages = ["src/jochwacht_sbom"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["placeholder/", "shim/"]
+# Kein exclude: placeholder/ und shim/ gibt es seit dem Umzug nicht mehr, und
+# include unten entscheidet ohnehin.
 include = ["src/", "tests/", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
 
 [tool.ruff]

@@ -39,19 +39,20 @@ leaves their machine.
 - Releases: tag `vX.Y.Z` → the `publish` workflow builds and publishes
   `jochwacht-sbom` (PyPI, Trusted Publishing) and the Linux binary. A
   release needs `.github/release-notes/vX.Y.Z.md`.
-- The old distribution names are frozen, each with its own tag so a routine
-  release can never push them again: `jochwacht-sbom-v*` and
-  `jochwacht-sbom-v*` publish the forwarding shells in `shim/`
-  (`publish-abschied`), `jochwacht-placeholder-v*` and
-  `jochwacht-placeholder-v*` the name reservations (`publish-placeholder`).
-  Each is meant to be published exactly once; PyPI refuses a re-upload.
-- Names the customer writes are NOT renamed here: `.jochwachtignore`,
-  `jochwacht-deps.yaml` and `jochwacht.yaml` are read by the suite under the
-  same spelling, and the suite keeps its name for now. Renaming them in
-  this repository alone would mean one tool honours the file and the other
-  does not. They change when the suite changes.
-- Environment variables are `JOCHWACHT_*`; the pre-rename `JOCHWACHT_*`
-  spelling is still read (`jochwacht_sbom/env.py`, one mechanical rule).
+- Every distribution of the product's former name is yanked on PyPI and its
+  release tag is frozen; `shim/` (the forwarding shells) and `placeholder/`
+  (the name reservations) were deleted with the move on 02.10.2026, together
+  with the workflow that published them. `publish-placeholder.yml` remains for
+  a future name reservation. Read the old spellings in `git log`, not here:
+  `tests/test_der_alte_name_ist_weg.py` forbids them in every shipped file —
+  content, markup with its tags stripped, and the file name.
+- Names the customer writes (`.jochwachtignore`, `jochwacht-deps.yaml`,
+  `jochwacht.yaml`) must match the suite exactly, which reads them under the
+  same spelling. Renaming one here alone would mean one tool honours the file
+  and the other does not. They change when the suite changes.
+- Environment variables are `JOCHWACHT_*` (`jochwacht_sbom/env.py`, one
+  prefix). There is no compatibility rule for the old spelling — there are no
+  installations to keep readable.
 - **No AI co-author trailers in commits of this public repository.**
 - Metadata only: fixtures and tests reference package names and versions;
   nothing here installs or executes third-party packages by design.
