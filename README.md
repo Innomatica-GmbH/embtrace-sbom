@@ -1,30 +1,26 @@
 # jochwacht-sbom
 
-> **Formerly jochwacht-sbom, then jochwacht-sbom.** Same tool, same code line,
-> new name — the old one collided with a registered trademark. From 0.9.0 on,
-> GPL-3.0-or-later. `pipx install jochwacht-sbom`; the `jochwacht-sbom` and
-> `jochwacht-sbom` commands keep working with a one-line notice, and both old
-> packages install this one. Releases up to jochwacht-sbom 0.8.6 stay MIT.
+> **Renamed on 01.10.2026** — same tool, same code line, new name: the old one
+> collided with a registered trademark. `pipx install jochwacht-sbom`. From
+> 0.9.0 on, GPL-3.0-or-later; releases up to 0.8.6 stay MIT. Every release
+> under the earlier names is withdrawn from PyPI.
 
-### If you already had the old package
+### If you installed this tool under its earlier name
 
-One package now provides all three commands, so the old installations are
-redundant — and `pipx` will not replace a command another installation
-already owns ("File exists at …/jochwacht-sbom … Not modifying"):
+Remove that installation and install this one — there is no forwarding
+command and no alias package, so the move is a clean swap rather than a
+layer:
 
 ```bash
-pipx uninstall jochwacht-sbom      # if you have it
-pipx uninstall jochwacht-sbom     # if you have it
-pipx install --force jochwacht-sbom
+pipx uninstall <the old package>   # whichever name you installed
+pipx install jochwacht-sbom
 ```
 
-With `pip`, `pip install -U jochwacht-sbom` is enough: it installs
-`jochwacht-sbom` and keeps the old command working.
-
-Nothing else needs touching. Your scripts keep running, `import
-jochwacht_sbom.…` resolves to the new modules, `except JochwachtError` catches
-the same class, `JOCHWACHT_*` environment variables are still read, and a
-bill written by any earlier release is still recognised as yours.
+One thing does carry over, because it is about a file you already have: a
+bill written by **any** earlier release is still recognised as yours, so it
+is overwritten in place instead of being refused as somebody else's evidence.
+The module path (`jochwacht_sbom`), the exception class and the `JOCHWACHT_*`
+environment variables all use the current name.
 
 **Reads your build, writes your bill of materials — locally.** One command in
 your project folder produces a CycloneDX SBOM, including from **configured

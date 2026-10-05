@@ -1,4 +1,4 @@
-"""jochwacht-sbom — SBOM generation for embedded builds (formerly jochwacht-sbom).
+"""jochwacht-sbom — SBOM generation for embedded builds.
 
 GPL-3.0-or-later, Copyright (C) 2026 Innomatica GmbH.
 """

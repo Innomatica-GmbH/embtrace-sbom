@@ -6,7 +6,7 @@ reinterpretation here.
 
 ## What this repository is
 
-`jochwacht-sbom` (formerly `jochwacht-sbom`, then `jochwacht-sbom`) is the
+`jochwacht-sbom` (renamed 01.10.2026; the earlier names are in `git log`) is the
 open-source collector of the Jochwacht CRA suite: it reads a build and writes a CycloneDX SBOM locally,
 and — only on the user's explicit decision — sends dependency metadata for a
 free CRA readiness report. It is published so that anyone can verify what

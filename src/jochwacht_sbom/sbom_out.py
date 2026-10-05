@@ -109,7 +109,23 @@ def build_cyclonedx(
 #: An existing bill is overwritten only when we wrote it ourselves;
 #: anything else — a suite bill, a stranger's, an unstamped file — is left
 #: untouched.
-OWN_TOOL_NAMES = frozenset({"jochwacht-sbom"})
+#: Every name this tool has EVER signed its own output with
+#: (``metadata.tools``). The list only grows: a file written by an older
+#: release is still our file, and refusing to overwrite it would send the
+#: customer to ``--sbom PATH`` for a bill we wrote ourselves last month.
+#:
+#: Twice now a search-and-replace has collapsed this set — on 01.10.2026 and
+#: again on 02.10.2026, the second time together with the comment that warned
+#: about the first. A stamp is a record of the past, not a reference to the
+#: product, and it does not move when the product is renamed. The guard that
+#: forbids the old spelling knows this exception by its marker, and
+#: ``tests/test_eigene_aeltere_stueckliste.py`` pins every entry so a third
+#: occurrence fails a test instead of reaching a user.  # alter-name-als-datum
+OWN_TOOL_NAMES = frozenset({
+    "jochwacht-sbom",   # since 0.12.0
+    "embtrace-sbom",    # 0.9.0 - 0.11.1   # alter-name-als-datum
+    "embtrace-check",   # up to 0.8.6      # alter-name-als-datum
+})
 
 
 def classify_existing(path: Path) -> str:

@@ -35,8 +35,24 @@ _MARKUP = {".svg", ".html", ".xml", ".md"}
 
 _TAG = re.compile(r"<[^>]*>")
 
-#: This file names the old spellings in order to forbid them.
-_ALLOWED_TO_NAME_IT = {Path(__file__).resolve()}
+#: A line carrying this marker may name the old spelling. The marker makes
+#: every exception visible and countable.
+_MARKER = "alter-name-als-datum"
+
+#: Where the old spelling is allowed, and why. NOT compatibility: a stamp
+#: sits INSIDE a bill that already exists on a disk, written before the rename
+#: of 01.10.2026, and cannot be renamed retroactively. Reading it is reading
+#: our own past output; the write path never emits it.
+_ALLOWED_TO_NAME_IT = {
+    Path(__file__).resolve():
+        "this file names the old spellings in order to forbid them",
+    (_REPO / "src/jochwacht_sbom/sbom_out.py").resolve():
+        "OWN_TOOL_NAMES — every name this tool ever signed its output with; "
+        "dropping one made a bill from an older release classify as foreign, "
+        "so the tool aborted on the user's own file (measured 05.10.2026)",
+    (_REPO / "tests/test_eigene_aeltere_stueckliste.py").resolve():
+        "the cases that pin every stamp and both stamp forms",
+}
 
 
 def _shipped_files() -> list[Path]:
@@ -62,7 +78,7 @@ def test_no_shipped_file_names_the_old_product(needle: str) -> None:
         except (UnicodeDecodeError, OSError):  # pragma: no cover - binary
             continue
         for number, line in enumerate(text.splitlines(), start=1):
-            if needle in line:
+            if needle in line and _MARKER not in line:
                 hits.append(f"{path.relative_to(_REPO)}:{number}")
     assert not hits, hits
 
@@ -114,3 +130,41 @@ def test_no_tracked_path_carries_the_old_name() -> None:
     ).stdout.split("\0")
     hits = [rel for rel in out if rel and "embtrace" in rel.lower()]
     assert not hits, hits
+
+
+def test_every_exception_carries_its_marker_and_its_reason() -> None:
+    for path, reason in _ALLOWED_TO_NAME_IT.items():
+        assert path.is_file(), path
+        assert len(reason) > 30, (path, reason)
+        if path == Path(__file__).resolve():
+            continue
+        assert _MARKER in path.read_text(encoding="utf-8"), (
+            f"{path} is allowed but does not say why"
+        )
+
+
+def test_the_exception_is_narrow() -> None:
+    """The marker may not spread across the tree."""
+    marked = []
+    for path in _shipped_files():
+        try:
+            if _MARKER in path.read_text(encoding="utf-8"):
+                marked.append(path.resolve())
+        except (UnicodeDecodeError, OSError):  # pragma: no cover - binary
+            continue
+    unexpected = [str(p.relative_to(_REPO)) for p in marked
+                  if p not in _ALLOWED_TO_NAME_IT]
+    assert not unexpected, unexpected
+
+
+def test_the_write_path_signs_only_the_current_name() -> None:
+    """The exception is READ-only — that keeps it from being a layer."""
+    import json
+
+    from jochwacht_sbom.collector import CheckStats
+    from jochwacht_sbom.sbom_out import build_cyclonedx
+
+    doc = build_cyclonedx([], CheckStats(), project_name="demo")
+    gezeichnet = {c["name"] for c in doc["metadata"]["tools"]["components"]}
+    assert gezeichnet == {"jochwacht-sbom"}
+    assert "embtrace" not in json.dumps(doc)  # alter-name-als-datum
