@@ -20,7 +20,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from jochwacht_sbom import __version__, diagnosis, env
+from jochwacht_sbom import __version__, diagnosis, env, filenames
 from jochwacht_sbom.collector import collect_components
 from jochwacht_sbom.core.exceptions import JochwachtError
 from jochwacht_sbom.payload import CheckPayload, build_payload
@@ -324,6 +324,19 @@ def _run(  # noqa: PLR0913 — mirrors the CLI surface
         sys.exit(1)
 
     console.print(f"[bold]jochwacht-sbom[/bold] {__version__} — scanning {path.resolve().name}/")
+
+    # A file the customer wrote under the former product name is NOT read —
+    # the move is complete, without a layer. Saying nothing about it would
+    # drop a hand-written declaration in silence, which is the one thing this
+    # tool promises never to do.
+    for found, needed in filenames.former_spelling_present(path):
+        console.print(
+            f"[yellow]Note:[/yellow] {found} is present and is [bold]not[/bold] "
+            f"read — this tool only reads {needed}. Rename it "
+            f"([dim]mv {found} {needed}[/dim]) or its contents are left out of "
+            f"the bill."
+        )
+
     diagnosis.reset()
     components, stats = collect_components(
         path,

@@ -52,6 +52,12 @@ _ALLOWED_TO_NAME_IT = {
         "so the tool aborted on the user's own file (measured 05.10.2026)",
     (_REPO / "tests/test_eigene_aeltere_stueckliste.py").resolve():
         "the cases that pin every stamp and both stamp forms",
+    (_REPO / "src/jochwacht_sbom/filenames.py").resolve():
+        "_FORMER_SPELLINGS — names a customer may still have on disk; we do "
+        "not read them, we look for them in order to say they are ignored, "
+        "because dropping a hand-written declaration in silence is worse",
+    (_REPO / "tests/test_alte_schreibweise_wird_gemeldet.py").resolve():
+        "the cases that prove the note appears and that it does not gate",
 }
 
 
